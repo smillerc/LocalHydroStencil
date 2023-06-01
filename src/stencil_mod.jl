@@ -1,6 +1,6 @@
 # module StencilType
 
-using StaticArrays, Base.Threads, CUDA, Polyester, LinearAlgebra, Unitful
+using StaticArrays, Base.Threads, Polyester, LinearAlgebra, Unitful
 using Adapt, MuladdMacro
 using StrideArrays
 using VectorizedStatistics
@@ -10,8 +10,6 @@ using VectorizedStatistics
 
 abstract type AbstractRiemannSolver end
 struct M_AUSMPWPlus2D <: AbstractRiemannSolver end
-
-
 
 const ϵ = 2eps(Float64)
 
@@ -38,26 +36,22 @@ struct Stencil9PointSplit{T,AA,AB,E}
     EOS::E
 end
 
-struct CartesianMesh{T,
-	AA2<:AbstractArray{T,2}, 
-	AA3<:AbstractArray{T,3}, 
-	AA4<:AbstractArray{T,4}
-    }
-    xy::AA3
-    centroid::AA3
-    volume::AA2
+struct CartesianMesh{AA1, AA2, AA3, AA4, AA5}
+    xy::AA1
+    centroid::AA2
+    volume::AA3
     facenorms::AA4
-    facelen::AA3
+    facelen::AA5
     nhalo::Int
 end
 
 function CartesianMesh(x::AbstractVector{T}, y::AbstractVector{T}, nhalo) where T
-    M = length(x) - 1 #+ 2nhalo
-    N = length(y) - 1 #+ 2nhalo
+    M = length(x) #+ 2nhalo
+    N = length(y) #+ 2nhalo
 
-    xy = zeros(2, M + 1, N + 1)
-    for j in 1:M+1
-        for i in 1:N+1
+    xy = zeros(2, M, N)
+    for j in 1:N
+        for i in 1:M
             xy[1,i,j] = x[i]
             xy[2,i,j] = y[j]
         end
@@ -68,9 +62,17 @@ function CartesianMesh(x::AbstractVector{T}, y::AbstractVector{T}, nhalo) where 
 
     facelen, facenorms = quad_face_areas_and_vecs(xy)
 
-    return CartesianMesh(xy, centroid, volume, facenorms, facelen, nhalo)
-end
+    nhat = [
+        SMatrix{2,4}(view(facenorms,:,:,i,j)) for j in axes(facenorms,4), i in axes(facenorms, 3)
+    ]
 
+    dS = [
+        SVector{4}(view(facelen,:,i,j)) for j in axes(facelen,3), i in axes(facelen, 2)
+    ]
+
+    # return CartesianMesh(xy, centroid, volume, facenorms, facelen, nhalo)
+    return CartesianMesh(xy, centroid, volume, nhat, dS, nhalo)
+end
 
 abstract type SSPRK3Integrator end
 
@@ -779,14 +781,21 @@ function MAUSMPW⁺(n̂,
     return SVector{4,Float64}(ρflux, ρuflux, ρvflux, Eflux)
 end
 
-function get_me_block(U,i,j)
-    ublk = @SArray [SVector{4,Float64}(view(U,:,i+io,j+jo)) for jo in -2:2, io in -2:2]
+function get_me_block(U::AbstractArray{T,3},i,j) where {T}
+    ublk = @SArray [
+        SVector{4,T}(view(U,:,i+io,j+jo)) for jo in -2:2, io in -2:2
+        ]
+    return ublk
 end
 
 function ∂U∂tvec(::M_AUSMPWPlus2D, stencil::Stencil9Point, recon::F1, limiter::F2) where {F1,F2}
     U⃗ = stencil.U⃗
     EOS = stencil.EOS
 
+    # If the entire block is uniform, skip the riemann solve and just return 
+    # if all_same(U⃗)
+    #     return @SVector zeros(size(stencil.S⃗,1))
+    # end
     # Conserved to primitive variables
     # W⃗ = cons2prim.(Ref(EOS), ρ, ρu, ρv, ρE)
     W⃗ = cons2prim_vec.(Ref(EOS),U⃗)
@@ -895,6 +904,116 @@ function ∂U∂tvec(::M_AUSMPWPlus2D, stencil::Stencil9Point, recon::F1, limite
           F⃗ⱼ_p_half * stencil.ΔS[3] - F⃗ⱼ_m_half * stencil.ΔS[1]) / stencil.Ω
     ) 
     + stencil.S⃗
+
+    return dUdt
+end
+
+# try with broadcasting on the riemann solver
+function ∂U∂t_bcast(::M_AUSMPWPlus2D, stencil::Stencil9Point, recon::F1, limiter::F2) where {F1,F2}
+    U⃗ = stencil.U⃗
+    EOS = stencil.EOS
+
+    # If the entire block is uniform, skip the riemann solve and just return 
+    # if all_same(U⃗)
+    #     return @SVector zeros(size(stencil.S⃗,1))
+    # end
+    # Conserved to primitive variables
+    # W⃗ = cons2prim.(Ref(EOS), ρ, ρu, ρv, ρE)
+    W⃗ = cons2prim_vec.(Ref(EOS),U⃗)
+
+    W⃗ᵢ₋₂ = W⃗[1, 3]
+    W⃗ⱼ₋₂ = W⃗[3, 1]
+    W⃗ᵢ₋₁ = W⃗[2, 3]
+    W⃗ⱼ₋₁ = W⃗[3, 2]
+    W⃗ᵢ = W⃗[3, 3]
+    W⃗ⱼ = W⃗[3, 3]
+    W⃗ᵢ₊₁ = W⃗[4, 3]
+    W⃗ⱼ₊₁ = W⃗[3, 4]
+    W⃗ᵢ₊₂ = W⃗[5, 3]
+    W⃗ⱼ₊₂ = W⃗[3, 5]
+
+    # Reconstruct the left/right states
+    ρᴸᴿᵢ, uᴸᴿᵢ, vᴸᴿᵢ, pᴸᴿᵢ = recon.(W⃗ᵢ₋₂, W⃗ᵢ₋₁, W⃗ᵢ, W⃗ᵢ₊₁, W⃗ᵢ₊₂, limiter) # i-1/2, i+1/2
+    ρᴸᴿⱼ, uᴸᴿⱼ, vᴸᴿⱼ, pᴸᴿⱼ = recon.(W⃗ⱼ₋₂, W⃗ⱼ₋₁, W⃗ⱼ, W⃗ⱼ₊₁, W⃗ⱼ₊₂, limiter) # j-1/2, j+1/2
+
+    ρᴸᴿᵢSB, uᴸᴿᵢSB, vᴸᴿᵢSB, pᴸᴿᵢSB = recon.(W⃗ᵢ₋₂, W⃗ᵢ₋₁, W⃗ᵢ, W⃗ᵢ₊₁, W⃗ᵢ₊₂, superbee) # i-1/2, i+1/2
+    ρᴸᴿⱼSB, uᴸᴿⱼSB, vᴸᴿⱼSB, pᴸᴿⱼSB = recon.(W⃗ⱼ₋₂, W⃗ⱼ₋₁, W⃗ⱼ, W⃗ⱼ₊₁, W⃗ⱼ₊₂, superbee) # j-1/2, j+1/2
+
+    ρᴸᴿᵢ⁻, ρᴸᴿᵢ⁺ = ρᴸᴿᵢ
+    uᴸᴿᵢ⁻, uᴸᴿᵢ⁺ = uᴸᴿᵢ
+    vᴸᴿᵢ⁻, vᴸᴿᵢ⁺ = vᴸᴿᵢ
+    pᴸᴿᵢ⁻, pᴸᴿᵢ⁺ = pᴸᴿᵢ
+
+    ρᴸᴿⱼ⁻, ρᴸᴿⱼ⁺ = ρᴸᴿⱼ
+    uᴸᴿⱼ⁻, uᴸᴿⱼ⁺ = uᴸᴿⱼ
+    vᴸᴿⱼ⁻, vᴸᴿⱼ⁺ = vᴸᴿⱼ
+    pᴸᴿⱼ⁻, pᴸᴿⱼ⁺ = pᴸᴿⱼ
+
+    ρᴸᴿᵢ⁻SB, ρᴸᴿᵢ⁺SB = ρᴸᴿᵢSB
+    uᴸᴿᵢ⁻SB, uᴸᴿᵢ⁺SB = uᴸᴿᵢSB
+    vᴸᴿᵢ⁻SB, vᴸᴿᵢ⁺SB = vᴸᴿᵢSB
+    pᴸᴿᵢ⁻SB, pᴸᴿᵢ⁺SB = pᴸᴿᵢSB
+
+    ρᴸᴿⱼ⁻SB, ρᴸᴿⱼ⁺SB = ρᴸᴿⱼSB
+    uᴸᴿⱼ⁻SB, uᴸᴿⱼ⁺SB = uᴸᴿⱼSB
+    vᴸᴿⱼ⁻SB, vᴸᴿⱼ⁺SB = vᴸᴿⱼSB
+    pᴸᴿⱼ⁻SB, pᴸᴿⱼ⁺SB = pᴸᴿⱼSB
+
+    W⃗ᵢc = (W⃗ᵢ₋₁, W⃗ᵢ) # i average state
+    W⃗ᵢc1 = (W⃗ᵢ, W⃗ᵢ₊₁) # i+1 average state
+
+    W⃗ⱼc = (W⃗ⱼ₋₁, W⃗ᵢ) # j average state
+    W⃗ⱼc1 = (W⃗ᵢ, W⃗ⱼ₊₁) # j+1 average state
+
+    n̂1 = -stencil.n̂[:, 1]
+    n̂2 = stencil.n̂[:, 2]
+    n̂3 = stencil.n̂[:, 3]
+    n̂4 = -stencil.n̂[:, 4]
+
+    # i⁻ = 2
+    # i⁺ = 3
+    # j = 3
+    # p0ᵢ = (W⃗[i⁻, j][4],     W⃗[i⁺, j][4])
+    # p1ᵢ = (W⃗[i⁻+1, j][4],   W⃗[i⁺+1, j][4])
+    # p2ᵢ = (W⃗[i⁻+1, j+1][4], W⃗[i⁺+1, j+1][4])
+    # p3ᵢ = (W⃗[i⁻+1, j-1][4], W⃗[i⁺+1, j-1][4])
+    # p4ᵢ = (W⃗[i⁻, j+1][4],   W⃗[i⁺, j+1][4])
+    # p5ᵢ = (W⃗[i⁻, j-1][4],   W⃗[i⁺, j-1][4])
+    ωᵢ = (1.0, 1.0) #modified_discontinuity_sensor_ξ.(p0ᵢ, p1ᵢ, p2ᵢ, p3ᵢ, p4ᵢ, p5ᵢ)
+
+    # i = 3
+    # j⁻ = 2
+    # j⁺ = 3
+    # p0ⱼ = (W⃗[i, j⁻][4],     W⃗[i,   j⁺][4])
+    # p1ⱼ = (W⃗[i+1, j⁻][4],   W⃗[i+1, j⁺][4])
+    # p2ⱼ = (W⃗[i+1, j⁻+1][4], W⃗[i+1, j⁺+1][4])
+    # p3ⱼ = (W⃗[i-1, j⁻+1][4], W⃗[i-1, j⁺+1][4])
+    # p4ⱼ = (W⃗[i-1, j⁻][4],   W⃗[i-1, j⁺][4])
+    # p5ⱼ = (W⃗[i, j⁻+1][4],   W⃗[i,   j⁺+1][4])
+    ωⱼ = (1.0, 1.0) #modified_discontinuity_sensor_η.(p0ⱼ, p1ⱼ, p2ⱼ, p3ⱼ, p4ⱼ, p5ⱼ)
+
+
+    # F⃗ᵢ_m_half, F⃗ⱼ_m_half, F⃗ᵢ_p_half, F⃗ⱼ_p_half
+    F⃗ᵢ_m_half, F⃗ⱼ_m_half, F⃗ᵢ_p_half, F⃗ⱼ_p_half = MAUSMPW⁺.(
+        (n̂4     , n̂1     , n̂2     , n̂3      ),
+        (ρᴸᴿᵢ⁻  , ρᴸᴿⱼ⁻  , ρᴸᴿᵢ⁺  , ρᴸᴿⱼ⁺   ),
+        (uᴸᴿᵢ⁻  , uᴸᴿⱼ⁻  , uᴸᴿᵢ⁺  , uᴸᴿⱼ⁺   ),
+        (vᴸᴿᵢ⁻  , vᴸᴿⱼ⁻  , vᴸᴿᵢ⁺  , vᴸᴿⱼ⁺   ),
+        (pᴸᴿᵢ⁻  , pᴸᴿⱼ⁻  , pᴸᴿᵢ⁺  , pᴸᴿⱼ⁺   ),
+        (ρᴸᴿᵢ⁻SB, ρᴸᴿⱼ⁻SB, ρᴸᴿᵢ⁺SB, ρᴸᴿⱼ⁺SB ),
+        (uᴸᴿᵢ⁻SB, uᴸᴿⱼ⁻SB, uᴸᴿᵢ⁺SB, uᴸᴿⱼ⁺SB ),
+        (vᴸᴿᵢ⁻SB, vᴸᴿⱼ⁻SB, vᴸᴿᵢ⁺SB, vᴸᴿⱼ⁺SB ),
+        (pᴸᴿᵢ⁻SB, pᴸᴿⱼ⁻SB, pᴸᴿᵢ⁺SB, pᴸᴿⱼ⁺SB ),
+        (W⃗ᵢc[1] , W⃗ⱼc[1] , W⃗ᵢc[2] , W⃗ⱼc[2]  ),
+        (W⃗ᵢc1[1], W⃗ⱼc1[1], W⃗ᵢc1[2], W⃗ⱼc1[2] ),
+        (ωᵢ[1]  , ωⱼ[1]  , ωᵢ[2]  , ωⱼ[2]   ),
+        (EOS    , EOS    , EOS    , EOS     )
+    )
+
+    dUdt = (
+        -(F⃗ᵢ_p_half * stencil.ΔS[2] - F⃗ᵢ_m_half * stencil.ΔS[4] +
+          F⃗ⱼ_p_half * stencil.ΔS[3] - F⃗ⱼ_m_half * stencil.ΔS[1]) / stencil.Ω
+    ) + stencil.S⃗
 
     return dUdt
 end
@@ -1243,14 +1362,16 @@ end
 
     # @batch needs to work with isbits types -- somehow see if I can make mesh contain only isbits stuff
     # Stage 1
-    @batch for j in jlo:jhi
+    @batch per=thread for j in jlo:jhi
         for i in ilo:ihi
-            U⁽ⁿ⁾ = SVector{4,Float64}(view(U⃗n, :, i, j))
+            U⁽ⁿ⁾ = SVector{4,T}(view(U⃗n, :, i, j))
 
             U_local = get_me_block(U⃗n,i,j)
             S⃗ = @SVector zeros(4)
-            n̂ = SMatrix{2,4}(view(norms,:,:,i,j))
-            ΔS = SVector{4,T}(view(ΔS_face,:,i,j))
+            # n̂ = SMatrix{2,4}(view(norms,:,:,i,j))
+            # ΔS = SVector{4,T}(view(ΔS_face,:,i,j))
+            n̂ = norms[i,j]
+            ΔS = ΔS_face[i,j]
             Ω = vol[i,j]
             stencil = Stencil9Point(U_local, S⃗, n̂, ΔS, Ω, EOS)
             ∂U⁽ⁿ⁾∂t = ∂U∂tvec(riemann_solver, stencil, muscl, minmod)
@@ -1262,16 +1383,19 @@ end
     sync_halo!(U⃗1)
 
     # Stage 2
-    @batch for j in jlo:jhi
+    @batch per=thread for j in jlo:jhi
         for i in ilo:ihi
-            U⁽¹⁾ = SVector{4,Float64}(view(U⃗1, :, i, j))
-            U⁽ⁿ⁾ = SVector{4,Float64}(view(U⃗n, :, i, j))
+            U⁽¹⁾ = SVector{4,T}(view(U⃗1, :, i, j))
+            U⁽ⁿ⁾ = SVector{4,T}(view(U⃗n, :, i, j))
 
             U_local =  get_me_block(U⃗1,i,j)
 
             S⃗ = @SVector zeros(4)
-            n̂ = SMatrix{2,4}(view(norms,:,:,i,j))
-            ΔS = SVector{4,T}(view(ΔS_face,:,i,j))
+            # n̂ = SMatrix{2,4}(view(norms,:,:,i,j))
+            # ΔS = SVector{4,T}(view(ΔS_face,:,i,j))
+            n̂ = norms[i,j]
+            ΔS = ΔS_face[i,j]
+            Ω = vol[i,j]
             Ω = vol[i,j]
             
             stencil = Stencil9Point(U_local, S⃗, n̂, ΔS, Ω, EOS)
@@ -1285,21 +1409,122 @@ end
     sync_halo!(U⃗2)
 
     # Stage 3
-    @batch for j in jlo:jhi
+    @batch per=thread for j in jlo:jhi
         for i in ilo:ihi
-            U⁽²⁾ = SVector{4,Float64}(view(U⃗2, :, i, j))
-            U⁽ⁿ⁾ = SVector{4,Float64}(view(U⃗n, :, i, j))
+            U⁽²⁾ = SVector{4,T}(view(U⃗2, :, i, j))
+            U⁽ⁿ⁾ = SVector{4,T}(view(U⃗n, :, i, j))
 
             U_local =  get_me_block(U⃗2,i,j)
 
             S⃗ = @SVector zeros(4)
-            n̂ = SMatrix{2,4}(view(norms,:,:,i,j))
-            ΔS = SVector{4,T}(view(ΔS_face,:,i,j))
+            # n̂ = SMatrix{2,4}(view(norms,:,:,i,j))
+            # ΔS = SVector{4,T}(view(ΔS_face,:,i,j))
+            n̂ = norms[i,j]
+            ΔS = ΔS_face[i,j]
+            Ω = vol[i,j]
             Ω = vol[i,j]
             
             stencil = Stencil9Point(U_local, S⃗, n̂, ΔS, Ω, EOS)
 
             ∂U⁽²⁾∂t = ∂U∂tvec(riemann_solver, stencil, muscl, minmod)
+            U⁽ⁿ⁺¹⁾ = (1 / 3) * U⁽ⁿ⁾ + (2 / 3) * U⁽²⁾ + ∂U⁽²⁾∂t * (2 / 3) * dt
+            U⃗3[:, i, j] = U⁽ⁿ⁺¹⁾
+        end
+    end
+
+    sync_halo!(U⃗3)
+
+    return nothing
+end
+
+@inbounds function SSPRK3_bcast_rs(SS::SSPRK3Integrator, U⃗n::AbstractArray{T}, 
+    riemann_solver, mesh, EOS, dt) where T
+
+    nhalo = mesh.nhalo
+    ilohi = axes(U⃗n, 2)
+    jlohi = axes(U⃗n, 3)
+    ilo = first(ilohi) + nhalo
+    jlo = first(jlohi) + nhalo
+    ihi = last(ilohi) - nhalo
+    jhi = last(jlohi) - nhalo
+
+    U⃗1 = SS.U⃗1
+    U⃗2 = SS.U⃗2
+    U⃗3 = SS.U⃗3
+
+    ΔS_face = mesh.facelen
+    vol = mesh.volume
+    norms = mesh.facenorms
+
+    blocks = SS.blocks
+
+    # @batch needs to work with isbits types -- somehow see if I can make mesh contain only isbits stuff
+    # Stage 1
+    @batch per=thread for j in jlo:jhi
+        for i in ilo:ihi
+            U⁽ⁿ⁾ = SVector{4,T}(view(U⃗n, :, i, j))
+
+            U_local = get_me_block(U⃗n,i,j)
+            S⃗ = @SVector zeros(4)
+            # n̂ = SMatrix{2,4}(view(norms,:,:,i,j))
+            # ΔS = SVector{4,T}(view(ΔS_face,:,i,j))
+            n̂ = norms[i,j]
+            ΔS = ΔS_face[i,j]
+            Ω = vol[i,j]
+            stencil = Stencil9Point(U_local, S⃗, n̂, ΔS, Ω, EOS)
+            ∂U⁽ⁿ⁾∂t = ∂U∂t_bcast(riemann_solver, stencil, muscl, minmod)
+            U⁽¹⁾ = U⁽ⁿ⁾ + ∂U⁽ⁿ⁾∂t * dt
+            U⃗1[:,i,j] = U⁽¹⁾
+        end
+    end
+
+    sync_halo!(U⃗1)
+
+    # Stage 2
+    @batch per=thread for j in jlo:jhi
+        for i in ilo:ihi
+            U⁽¹⁾ = SVector{4,T}(view(U⃗1, :, i, j))
+            U⁽ⁿ⁾ = SVector{4,T}(view(U⃗n, :, i, j))
+
+            U_local =  get_me_block(U⃗1,i,j)
+
+            S⃗ = @SVector zeros(4)
+            # n̂ = SMatrix{2,4}(view(norms,:,:,i,j))
+            # ΔS = SVector{4,T}(view(ΔS_face,:,i,j))
+            n̂ = norms[i,j]
+            ΔS = ΔS_face[i,j]
+            Ω = vol[i,j]
+            Ω = vol[i,j]
+            
+            stencil = Stencil9Point(U_local, S⃗, n̂, ΔS, Ω, EOS)
+
+            ∂U⁽¹⁾∂t = ∂U∂t_bcast(riemann_solver, stencil, muscl, minmod)
+            U⁽²⁾ = 0.75U⁽ⁿ⁾ + 0.25U⁽¹⁾ + ∂U⁽¹⁾∂t * 0.25dt
+            U⃗2[:,i,j] = U⁽²⁾
+        end
+    end
+
+    sync_halo!(U⃗2)
+
+    # Stage 3
+    @batch per=thread for j in jlo:jhi
+        for i in ilo:ihi
+            U⁽²⁾ = SVector{4,T}(view(U⃗2, :, i, j))
+            U⁽ⁿ⁾ = SVector{4,T}(view(U⃗n, :, i, j))
+
+            U_local =  get_me_block(U⃗2,i,j)
+
+            S⃗ = @SVector zeros(4)
+            # n̂ = SMatrix{2,4}(view(norms,:,:,i,j))
+            # ΔS = SVector{4,T}(view(ΔS_face,:,i,j))
+            n̂ = norms[i,j]
+            ΔS = ΔS_face[i,j]
+            Ω = vol[i,j]
+            Ω = vol[i,j]
+            
+            stencil = Stencil9Point(U_local, S⃗, n̂, ΔS, Ω, EOS)
+
+            ∂U⁽²⁾∂t = ∂U∂t_bcast(riemann_solver, stencil, muscl, minmod)
             U⁽ⁿ⁺¹⁾ = (1 / 3) * U⁽ⁿ⁾ + (2 / 3) * U⁽²⁾ + ∂U⁽²⁾∂t * (2 / 3) * dt
             U⃗3[:, i, j] = U⁽ⁿ⁺¹⁾
         end
@@ -1808,6 +2033,20 @@ end
 
     return nothing
 end
+
+function all_same(blk)
+    blk0 = @view first(blk)[:]
+
+    for cell in blk
+        for q in eachindex(cell)
+            if !isapprox(blk0[q], cell[q])
+                return false
+            end
+        end
+    end
+    return true
+end
+
 
 function get_blk2(U, i, j, nhalo)
     Ublock = MArray{Tuple{4,5,5},Float64,3,100}(undef)
