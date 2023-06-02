@@ -1,3 +1,8 @@
+module MeshType
+
+using Adapt, StaticArrays
+
+export CartesianMesh
 
 struct CartesianMesh{AA1,AA2,AA3,AA4,AA5}
     xy::AA1
@@ -26,7 +31,8 @@ function CartesianMesh(x::AbstractVector{T}, y::AbstractVector{T}, nhalo) where 
     facelen, facenorms = quad_face_areas_and_vecs(xy)
 
     nhat = [
-        SMatrix{2,4}(view(facenorms, :, :, i, j)) for j in axes(facenorms, 4), i in axes(facenorms, 3)
+        SMatrix{2,4}(view(facenorms, :, :, i, j)) for j in axes(facenorms, 4),
+        i in axes(facenorms, 3)
     ]
 
     dS = [
@@ -38,7 +44,6 @@ function CartesianMesh(x::AbstractVector{T}, y::AbstractVector{T}, nhalo) where 
 end
 
 function Adapt.adapt_structure(to, mesh::CartesianMesh)
-
     _xy = Adapt.adapt_structure(to, mesh.xy)
     _centroid = Adapt.adapt_structure(to, mesh.centroid)
     _volume = Adapt.adapt_structure(to, mesh.volume)
@@ -46,19 +51,10 @@ function Adapt.adapt_structure(to, mesh::CartesianMesh)
     _facelen = Adapt.adapt_structure(to, mesh.facelen)
     _nhalo = Adapt.adapt_structure(to, mesh.nhalo)
 
-    CartesianMesh(_xy,
-        _centroid,
-        _volume,
-        _facenorms,
-        _facelen,
-        _nhalo,
-    )
-
+    return CartesianMesh(_xy, _centroid, _volume, _facenorms, _facelen, _nhalo)
 end
 
-
 function quad_volumes(xy::AbstractArray{T,3}) where {T}
-
     ni = size(xy, 2) - 1
     nj = size(xy, 3) - 1
     volumes = zeros(T, (ni, nj))
@@ -68,9 +64,9 @@ function quad_volumes(xy::AbstractArray{T,3}) where {T}
     for j in 1:nj
         for i in 1:ni
             x1, y1 = @views xy[:, i, j]
-            x2, y2 = @views xy[:, i+1, j]
-            x3, y3 = @views xy[:, i+1, j+1]
-            x4, y4 = @views xy[:, i, j+1]
+            x2, y2 = @views xy[:, i + 1, j]
+            x3, y3 = @views xy[:, i + 1, j + 1]
+            x4, y4 = @views xy[:, i, j + 1]
 
             dx13 = x1 - x3
             dy24 = y2 - y4
@@ -96,11 +92,13 @@ function quad_centroids(xy::AbstractArray{T,3}) where {T}
 
     for j in 1:nj
         for i in 1:ni
-            centroids[1, i, j] = 0.25(xy[1, i, j] + xy[1, i+1, j] + xy[1, i+1, j+1] + xy[1, i, j+1])
-            centroids[2, i, j] = 0.25(xy[2, i, j] + xy[2, i+1, j] + xy[2, i+1, j+1] + xy[2, i, j+1])
+            centroids[1, i, j] =
+                0.25(xy[1, i, j] + xy[1, i + 1, j] + xy[1, i + 1, j + 1] + xy[1, i, j + 1])
+            centroids[2, i, j] =
+                0.25(xy[2, i, j] + xy[2, i + 1, j] + xy[2, i + 1, j + 1] + xy[2, i, j + 1])
         end
     end
-    centroids
+    return centroids
 end
 
 function quad_face_areas_and_vecs(xy::AbstractArray{T,3}) where {T}
@@ -114,9 +112,9 @@ function quad_face_areas_and_vecs(xy::AbstractArray{T,3}) where {T}
     for j in 1:nj
         for i in 1:ni
             x1, y1 = @views xy[:, i, j]
-            x2, y2 = @views xy[:, i+1, j]
-            x3, y3 = @views xy[:, i+1, j+1]
-            x4, y4 = @views xy[:, i, j+1]
+            x2, y2 = @views xy[:, i + 1, j]
+            x3, y3 = @views xy[:, i + 1, j + 1]
+            x4, y4 = @views xy[:, i, j + 1]
 
             Δx21 = x2 - x1
             Δx32 = x3 - x2
@@ -166,4 +164,6 @@ function quad_face_areas_and_vecs(xy::AbstractArray{T,3}) where {T}
     end
 
     return facelens, normvecs
+end
+
 end

@@ -1,12 +1,205 @@
+module RiemannSolverType
+
+using ..EOSType
+using ..ReconstructionType
+using ..StencilType
+
+export M_AUSMPWPlus2D, MAUSMPW⁺
+
 
 abstract type AbstractRiemannSolver end
 struct M_AUSMPWPlus2D <: AbstractRiemannSolver end
 
-function MAUSMPW⁺(n̂, 
-    ρ_LR::NTuple{2,T}, u_LR::NTuple{2,T}, v_LR::NTuple{2,T}, p_LR::NTuple{2,T}, 
-    ρ_LR_SB::NTuple{2,T}, u_LR_SB::NTuple{2,T}, v_LR_SB::NTuple{2,T}, p_LR_SB::NTuple{2,T},
-    W⃗ᵢ, W⃗ᵢ₊₁, w₂, EOS) where {T}
+"""Check if all values in the block are the same. This lets us skip the Riemann solve"""
+function all_same(blk)
+    blk0 = @view first(blk)[:]
 
+    for cell in blk
+        for q in eachindex(cell)
+            if !isapprox(blk0[q], cell[q])
+                return false
+            end
+        end
+    end
+    return true
+end
+
+function ∂U∂t(
+    ::M_AUSMPWPlus2D, stencil::Stencil9Point, recon::F1, limiter::F2
+) where {F1,F2}
+    U⃗ = stencil.U⃗
+    EOS = stencil.EOS
+
+    # If the entire block is uniform, skip the riemann solve and just return 
+    # if all_same(U⃗)
+    #     return @SVector zeros(size(stencil.S⃗,1))
+    # end
+    # Conserved to primitive variables
+    # W⃗ = cons2prim.(Ref(EOS), ρ, ρu, ρv, ρE)
+    W⃗ = cons2prim.(Ref(EOS), U⃗)
+
+    W⃗ᵢ₋₂ = W⃗[1, 3]
+    W⃗ⱼ₋₂ = W⃗[3, 1]
+    W⃗ᵢ₋₁ = W⃗[2, 3]
+    W⃗ⱼ₋₁ = W⃗[3, 2]
+    W⃗ᵢ = W⃗[3, 3]
+    W⃗ⱼ = W⃗[3, 3]
+    W⃗ᵢ₊₁ = W⃗[4, 3]
+    W⃗ⱼ₊₁ = W⃗[3, 4]
+    W⃗ᵢ₊₂ = W⃗[5, 3]
+    W⃗ⱼ₊₂ = W⃗[3, 5]
+
+    # Reconstruct the left/right states
+    ρᴸᴿᵢ, uᴸᴿᵢ, vᴸᴿᵢ, pᴸᴿᵢ = recon.(W⃗ᵢ₋₂, W⃗ᵢ₋₁, W⃗ᵢ, W⃗ᵢ₊₁, W⃗ᵢ₊₂, limiter) # i-1/2, i+1/2
+    ρᴸᴿⱼ, uᴸᴿⱼ, vᴸᴿⱼ, pᴸᴿⱼ = recon.(W⃗ⱼ₋₂, W⃗ⱼ₋₁, W⃗ⱼ, W⃗ⱼ₊₁, W⃗ⱼ₊₂, limiter) # j-1/2, j+1/2
+
+    ρᴸᴿᵢSB, uᴸᴿᵢSB, vᴸᴿᵢSB, pᴸᴿᵢSB = recon.(W⃗ᵢ₋₂, W⃗ᵢ₋₁, W⃗ᵢ, W⃗ᵢ₊₁, W⃗ᵢ₊₂, superbee) # i-1/2, i+1/2
+    ρᴸᴿⱼSB, uᴸᴿⱼSB, vᴸᴿⱼSB, pᴸᴿⱼSB = recon.(W⃗ⱼ₋₂, W⃗ⱼ₋₁, W⃗ⱼ, W⃗ⱼ₊₁, W⃗ⱼ₊₂, superbee) # j-1/2, j+1/2
+
+    ρᴸᴿᵢ⁻, ρᴸᴿᵢ⁺ = ρᴸᴿᵢ
+    uᴸᴿᵢ⁻, uᴸᴿᵢ⁺ = uᴸᴿᵢ
+    vᴸᴿᵢ⁻, vᴸᴿᵢ⁺ = vᴸᴿᵢ
+    pᴸᴿᵢ⁻, pᴸᴿᵢ⁺ = pᴸᴿᵢ
+
+    ρᴸᴿⱼ⁻, ρᴸᴿⱼ⁺ = ρᴸᴿⱼ
+    uᴸᴿⱼ⁻, uᴸᴿⱼ⁺ = uᴸᴿⱼ
+    vᴸᴿⱼ⁻, vᴸᴿⱼ⁺ = vᴸᴿⱼ
+    pᴸᴿⱼ⁻, pᴸᴿⱼ⁺ = pᴸᴿⱼ
+
+    ρᴸᴿᵢ⁻SB, ρᴸᴿᵢ⁺SB = ρᴸᴿᵢSB
+    uᴸᴿᵢ⁻SB, uᴸᴿᵢ⁺SB = uᴸᴿᵢSB
+    vᴸᴿᵢ⁻SB, vᴸᴿᵢ⁺SB = vᴸᴿᵢSB
+    pᴸᴿᵢ⁻SB, pᴸᴿᵢ⁺SB = pᴸᴿᵢSB
+
+    ρᴸᴿⱼ⁻SB, ρᴸᴿⱼ⁺SB = ρᴸᴿⱼSB
+    uᴸᴿⱼ⁻SB, uᴸᴿⱼ⁺SB = uᴸᴿⱼSB
+    vᴸᴿⱼ⁻SB, vᴸᴿⱼ⁺SB = vᴸᴿⱼSB
+    pᴸᴿⱼ⁻SB, pᴸᴿⱼ⁺SB = pᴸᴿⱼSB
+
+    W⃗ᵢc = (W⃗ᵢ₋₁, W⃗ᵢ) # i average state
+    W⃗ᵢc1 = (W⃗ᵢ, W⃗ᵢ₊₁) # i+1 average state
+
+    W⃗ⱼc = (W⃗ⱼ₋₁, W⃗ᵢ) # j average state
+    W⃗ⱼc1 = (W⃗ᵢ, W⃗ⱼ₊₁) # j+1 average state
+
+    n̂1 = -stencil.n̂[:, 1]
+    n̂2 = stencil.n̂[:, 2]
+    n̂3 = stencil.n̂[:, 3]
+    n̂4 = -stencil.n̂[:, 4]
+
+    # i⁻ = 2
+    # i⁺ = 3
+    # j = 3
+    # p0ᵢ = (W⃗[i⁻, j][4],     W⃗[i⁺, j][4])
+    # p1ᵢ = (W⃗[i⁻+1, j][4],   W⃗[i⁺+1, j][4])
+    # p2ᵢ = (W⃗[i⁻+1, j+1][4], W⃗[i⁺+1, j+1][4])
+    # p3ᵢ = (W⃗[i⁻+1, j-1][4], W⃗[i⁺+1, j-1][4])
+    # p4ᵢ = (W⃗[i⁻, j+1][4],   W⃗[i⁺, j+1][4])
+    # p5ᵢ = (W⃗[i⁻, j-1][4],   W⃗[i⁺, j-1][4])
+    ωᵢ = (1.0, 1.0) #modified_discontinuity_sensor_ξ.(p0ᵢ, p1ᵢ, p2ᵢ, p3ᵢ, p4ᵢ, p5ᵢ)
+
+    # i = 3
+    # j⁻ = 2
+    # j⁺ = 3
+    # p0ⱼ = (W⃗[i, j⁻][4],     W⃗[i,   j⁺][4])
+    # p1ⱼ = (W⃗[i+1, j⁻][4],   W⃗[i+1, j⁺][4])
+    # p2ⱼ = (W⃗[i+1, j⁻+1][4], W⃗[i+1, j⁺+1][4])
+    # p3ⱼ = (W⃗[i-1, j⁻+1][4], W⃗[i-1, j⁺+1][4])
+    # p4ⱼ = (W⃗[i-1, j⁻][4],   W⃗[i-1, j⁺][4])
+    # p5ⱼ = (W⃗[i, j⁻+1][4],   W⃗[i,   j⁺+1][4])
+    ωⱼ = (1.0, 1.0) #modified_discontinuity_sensor_η.(p0ⱼ, p1ⱼ, p2ⱼ, p3ⱼ, p4ⱼ, p5ⱼ)
+
+    F⃗ᵢ_m_half = MAUSMPW⁺(
+        n̂4,
+        ρᴸᴿᵢ⁻,
+        uᴸᴿᵢ⁻,
+        vᴸᴿᵢ⁻,
+        pᴸᴿᵢ⁻,
+        ρᴸᴿᵢ⁻SB,
+        uᴸᴿᵢ⁻SB,
+        vᴸᴿᵢ⁻SB,
+        pᴸᴿᵢ⁻SB,
+        W⃗ᵢc[1],
+        W⃗ᵢc1[1],
+        ωᵢ[1],
+        EOS,
+    )
+
+    F⃗ⱼ_m_half = MAUSMPW⁺(
+        n̂1,
+        ρᴸᴿⱼ⁻,
+        uᴸᴿⱼ⁻,
+        vᴸᴿⱼ⁻,
+        pᴸᴿⱼ⁻,
+        ρᴸᴿⱼ⁻SB,
+        uᴸᴿⱼ⁻SB,
+        vᴸᴿⱼ⁻SB,
+        pᴸᴿⱼ⁻SB,
+        W⃗ⱼc[1],
+        W⃗ⱼc1[1],
+        ωⱼ[1],
+        EOS,
+    )
+
+    F⃗ᵢ_p_half = MAUSMPW⁺(
+        n̂2,
+        ρᴸᴿᵢ⁺,
+        uᴸᴿᵢ⁺,
+        vᴸᴿᵢ⁺,
+        pᴸᴿᵢ⁺,
+        ρᴸᴿᵢ⁺SB,
+        uᴸᴿᵢ⁺SB,
+        vᴸᴿᵢ⁺SB,
+        pᴸᴿᵢ⁺SB,
+        W⃗ᵢc[2],
+        W⃗ᵢc1[2],
+        ωᵢ[2],
+        EOS,
+    )
+
+    F⃗ⱼ_p_half = MAUSMPW⁺(
+        n̂3,
+        ρᴸᴿⱼ⁺,
+        uᴸᴿⱼ⁺,
+        vᴸᴿⱼ⁺,
+        pᴸᴿⱼ⁺,
+        ρᴸᴿⱼ⁺SB,
+        uᴸᴿⱼ⁺SB,
+        vᴸᴿⱼ⁺SB,
+        pᴸᴿⱼ⁺SB,
+        W⃗ⱼc[2],
+        W⃗ⱼc1[2],
+        ωⱼ[2],
+        EOS,
+    )
+
+    dUdt = (
+        -(
+            F⃗ᵢ_p_half * stencil.ΔS[2] - F⃗ᵢ_m_half * stencil.ΔS[4] +
+            F⃗ⱼ_p_half * stencil.ΔS[3] - F⃗ⱼ_m_half * stencil.ΔS[1]
+        ) / stencil.Ω
+    )
+    +stencil.S⃗
+
+    return dUdt
+end
+
+
+function MAUSMPW⁺(
+    n̂,
+    ρ_LR::NTuple{2,T},
+    u_LR::NTuple{2,T},
+    v_LR::NTuple{2,T},
+    p_LR::NTuple{2,T},
+    ρ_LR_SB::NTuple{2,T},
+    u_LR_SB::NTuple{2,T},
+    v_LR_SB::NTuple{2,T},
+    p_LR_SB::NTuple{2,T},
+    W⃗ᵢ,
+    W⃗ᵢ₊₁,
+    w₂,
+    EOS,
+) where {T}
     ρʟ, ρʀ = ρ_LR
     uʟ, uʀ = u_LR
     vʟ, vʀ = v_LR
@@ -60,7 +253,9 @@ function MAUSMPW⁺(n̂,
     # Modified functions for M-AUSMPW+
     Mstarᵢ = Uᵢ / cₛ
     Mstarᵢ₊₁ = Uᵢ₊₁ / cₛ
-    Pʟ⁺, Pʀ⁻ = modified_pressure_split(Mʟ, Mʀ, Mstarᵢ, Mstarᵢ₊₁, ρᵢ, Uᵢ, pᵢ, ρᵢ₊₁, Uᵢ₊₁, pᵢ₊₁)
+    Pʟ⁺, Pʀ⁻ = modified_pressure_split(
+        Mʟ, Mʀ, Mstarᵢ, Mstarᵢ₊₁, ρᵢ, Uᵢ, pᵢ, ρᵢ₊₁, Uᵢ₊₁, pᵢ₊₁
+    )
     pₛ = pʟ * Pʟ⁺ + pʀ * Pʀ⁻
     w₁ = discontinuity_sensor(pʟ, pʀ)
     w = max(w₁, w₂)
@@ -116,7 +311,9 @@ function MAUSMPW⁺(n̂,
     return SVector{4,Float64}(ρflux, ρuflux, ρvflux, Eflux)
 end
 
-@inline function pressure_based_weight_function(p_L::T, p_R::T, p_s::T, min_neighbor_press::T) where T
+@inline function pressure_based_weight_function(
+    p_L::T, p_R::T, p_s::T, min_neighbor_press::T
+) where {T}
     if abs(p_s) < typemin(T) # p_s == 0
         f_L = zero(T)
         f_R = zero(T)
@@ -136,14 +333,14 @@ end
     return f_L, f_R
 end
 
-@inline function discontinuity_sensor(p_L::T, p_R::T) where T
+@inline function discontinuity_sensor(p_L::T, p_R::T) where {T}
     min_term = min((p_L / p_R), (p_R / p_L))
     w = 1 - (min_term * min_term * min_term)
     w = w * (abs(w) >= ϵ)
     return w
 end
 
-@inline function pressure_split_plus(M::T; α=zero(T)) where T
+@inline function pressure_split_plus(M::T; α=zero(T)) where {T}
     if abs(M) > 1
         P⁺ = 0.5(1 + sign(M))
     else #  |M| <= 1
@@ -152,7 +349,7 @@ end
     return P⁺
 end
 
-@inline function pressure_split_minus(M::T; α=zero(T)) where T
+@inline function pressure_split_minus(M::T; α=zero(T)) where {T}
     if abs(M) > 1
         P⁻ = 0.5(1 - sign(M))
     else #  |M| <= 1
@@ -188,7 +385,6 @@ end
 end
 
 @inline function reconstruct_sb(ϕᵢ, ϕᵢ₊₁, ϕᵢ₊₂)
-
     @inline superbee(r) = max(0, min(2r, 1), min(r, 2))
 
     Δ⁻½ = ϕᵢ - ϕᵢ₊₁
@@ -204,8 +400,9 @@ end
     return ϕ_left, ϕ_right
 end
 
-@inline function modified_pressure_split(Mʟ, Mʀ, Mstarᵢ, Mstarᵢ₊₁, ρᵢ, uᵢ, pᵢ, ρᵢ₊₁, uᵢ₊₁, pᵢ₊₁)
-
+@inline function modified_pressure_split(
+    Mʟ, Mʀ, Mstarᵢ, Mstarᵢ₊₁, ρᵢ, uᵢ, pᵢ, ρᵢ₊₁, uᵢ₊₁, pᵢ₊₁
+)
     if Mstarᵢ > 1 && Mstarᵢ₊₁ < 1 && 0 < Mstarᵢ * Mstarᵢ₊₁ < 1
         P⁻ᵢ₊₁ = max(0, min(0.5, 1 - ((ρᵢ * uᵢ * (uᵢ - uᵢ₊₁) + pᵢ) / pᵢ₊₁)))
     else
@@ -221,12 +418,16 @@ end
     return P⁺ᵢ, P⁻ᵢ₊₁
 end
 
-@inline function modified_discontinuity_sensor_ξ(p̄ᵢⱼ::T, p̄ᵢ₊₁ⱼ::T, p̄ᵢ₊₁ⱼ₊₁::T, p̄ᵢ₊₁ⱼ₋₁::T, p̄ᵢⱼ₊₁::T, p̄ᵢⱼ₋₁::T) where T
+@inline function modified_discontinuity_sensor_ξ(
+    p̄ᵢⱼ::T, p̄ᵢ₊₁ⱼ::T, p̄ᵢ₊₁ⱼ₊₁::T, p̄ᵢ₊₁ⱼ₋₁::T, p̄ᵢⱼ₊₁::T, p̄ᵢⱼ₋₁::T
+) where {T}
     Δp = abs(p̄ᵢ₊₁ⱼ - p̄ᵢⱼ)
     Δpᵢ₊₁ = abs(p̄ᵢ₊₁ⱼ₊₁ - p̄ᵢ₊₁ⱼ₋₁)
     Δpᵢ = abs(p̄ᵢⱼ₊₁ - p̄ᵢⱼ₋₁)
 
-    w₂ = (1 - min(1, Δp / (0.25(Δpᵢ₊₁ + Δpᵢ))))^2 * (1 - min((p̄ᵢⱼ / p̄ᵢ₊₁ⱼ), (p̄ᵢ₊₁ⱼ / p̄ᵢⱼ)))^2
+    w₂ =
+        (1 - min(1, Δp / (0.25(Δpᵢ₊₁ + Δpᵢ))))^2 *
+        (1 - min((p̄ᵢⱼ / p̄ᵢ₊₁ⱼ), (p̄ᵢ₊₁ⱼ / p̄ᵢⱼ)))^2
     if isnan(w₂) || abs(w₂) < ϵ
         w₂ = zero(T)
     end
@@ -234,7 +435,9 @@ end
     return w₂
 end
 
-@inline function w2_ξ(p̄ᵢⱼ::T, p̄ᵢ₊₁ⱼ::T, p̄ᵢ₊₁ⱼ₊₁::T, p̄ᵢ₊₁ⱼ₋₁::T, p̄ᵢⱼ₊₁::T, p̄ᵢⱼ₋₁::T) where T
+@inline function w2_ξ(
+    p̄ᵢⱼ::T, p̄ᵢ₊₁ⱼ::T, p̄ᵢ₊₁ⱼ₊₁::T, p̄ᵢ₊₁ⱼ₋₁::T, p̄ᵢⱼ₊₁::T, p̄ᵢⱼ₋₁::T
+) where {T}
     denom = 0.25(p̄ᵢ₊₁ⱼ₊₁ + p̄ᵢⱼ₊₁ - p̄ᵢ₊₁ⱼ₋₁ - p̄ᵢⱼ₋₁)
     first_term = (1 - min(1, (p̄ᵢ₊₁ⱼ - p̄ᵢⱼ) / denom))^2
     second_term = (1 - min((p̄ᵢⱼ / p̄ᵢ₊₁ⱼ), (p̄ᵢ₊₁ⱼ / p̄ᵢⱼ)))^2
@@ -242,12 +445,16 @@ end
     return w₂
 end
 
-@inline function modified_discontinuity_sensor_η(p̄ᵢⱼ::T, p̄ᵢ₊₁ⱼ::T, p̄ᵢ₊₁ⱼ₊₁::T, p̄ᵢ₋₁ⱼ₊₁::T, p̄ᵢ₋₁ⱼ::T, p̄ᵢⱼ₊₁::T) where T
+@inline function modified_discontinuity_sensor_η(
+    p̄ᵢⱼ::T, p̄ᵢ₊₁ⱼ::T, p̄ᵢ₊₁ⱼ₊₁::T, p̄ᵢ₋₁ⱼ₊₁::T, p̄ᵢ₋₁ⱼ::T, p̄ᵢⱼ₊₁::T
+) where {T}
     Δp = abs(p̄ᵢⱼ₊₁ - p̄ᵢⱼ)
     Δpⱼ₊₁ = abs(p̄ᵢ₊₁ⱼ₊₁ - p̄ᵢ₋₁ⱼ₊₁)
     Δpⱼ = abs(p̄ᵢ₊₁ⱼ - p̄ᵢ₋₁ⱼ)
 
-    w₂ = (1 - min(1, Δp / (0.25(Δpⱼ₊₁ + Δpⱼ))))^2 * (1 - min((p̄ᵢⱼ / p̄ᵢⱼ₊₁), (p̄ᵢⱼ₊₁ / p̄ᵢⱼ)))^2
+    w₂ =
+        (1 - min(1, Δp / (0.25(Δpⱼ₊₁ + Δpⱼ))))^2 *
+        (1 - min((p̄ᵢⱼ / p̄ᵢⱼ₊₁), (p̄ᵢⱼ₊₁ / p̄ᵢⱼ)))^2
     if isnan(w₂) || abs(w₂) < ϵ
         w₂ = zero(T)
     end
@@ -255,7 +462,9 @@ end
     return w₂
 end
 
-@inline function w2_η(p̄ᵢⱼ::T, p̄ᵢ₊₁ⱼ::T, p̄ᵢ₊₁ⱼ₊₁::T, p̄ᵢ₋₁ⱼ₊₁::T, p̄ᵢ₋₁ⱼ::T, p̄ᵢⱼ₊₁::T) where T
+@inline function w2_η(
+    p̄ᵢⱼ::T, p̄ᵢ₊₁ⱼ::T, p̄ᵢ₊₁ⱼ₊₁::T, p̄ᵢ₋₁ⱼ₊₁::T, p̄ᵢ₋₁ⱼ::T, p̄ᵢⱼ₊₁::T
+) where {T}
     denom = 0.25(p̄ᵢ₊₁ⱼ₊₁ + p̄ᵢ₊₁ⱼ - p̄ᵢ₋₁ⱼ₊₁ - p̄ᵢ₋₁ⱼ)
     first_term = (1 - min(1, (p̄ᵢⱼ₊₁ - p̄ᵢⱼ) / denom))^2
     second_term = (1 - min((p̄ᵢⱼ / p̄ᵢⱼ₊₁), (p̄ᵢⱼ₊₁ / p̄ᵢⱼ)))^2
@@ -263,7 +472,7 @@ end
     return w₂
 end
 
-@inline function modified_f(pʟʀ::T, pₛ::T, w₂::T) where T
+@inline function modified_f(pʟʀ::T, pₛ::T, w₂::T) where {T}
     if abs(pₛ) > zero(T)
         f = ((pʟʀ / pₛ) - 1) * (1 - w₂)
     else
@@ -273,21 +482,25 @@ end
 end
 
 @inline function ϕ_L_half(ϕ_L, ϕ_R, ϕ_L_sb, a)
-
     if abs(ϕ_R - ϕ_L) < 1.0 || abs(ϕ_L_sb - ϕ_L) < ϵ
         ϕ_L_half = ϕ_L
     else
-        ϕ_L_half = ϕ_L + max(0, (ϕ_R - ϕ_L) * (ϕ_L_sb - ϕ_L)) /
-                         ((ϕ_R - ϕ_L) * abs(ϕ_L_sb - ϕ_L)) * min(a, 0.5 * abs(ϕ_R - ϕ_L), abs(ϕ_L_sb - ϕ_L))
+        ϕ_L_half =
+            ϕ_L +
+            max(0, (ϕ_R - ϕ_L) * (ϕ_L_sb - ϕ_L)) / ((ϕ_R - ϕ_L) * abs(ϕ_L_sb - ϕ_L)) *
+            min(a, 0.5 * abs(ϕ_R - ϕ_L), abs(ϕ_L_sb - ϕ_L))
     end
-
 end
 
 @inline function ϕ_R_half(ϕ_L, ϕ_R, ϕ_R_sb, a)
     if abs(ϕ_L - ϕ_R) < ϵ || abs(ϕ_R_sb - ϕ_R) < 1.0
         ϕ_R_half = ϕ_R
     else
-        ϕ_R_half = ϕ_R + max(0, (ϕ_L - ϕ_R) * (ϕ_R_sb - ϕ_R)) /
-                         ((ϕ_L - ϕ_R) * abs(ϕ_R_sb - ϕ_R)) * min(a, 0.5 * abs(ϕ_L - ϕ_R), abs(ϕ_R_sb - ϕ_R))
+        ϕ_R_half =
+            ϕ_R +
+            max(0, (ϕ_L - ϕ_R) * (ϕ_R_sb - ϕ_R)) / ((ϕ_L - ϕ_R) * abs(ϕ_R_sb - ϕ_R)) *
+            min(a, 0.5 * abs(ϕ_L - ϕ_R), abs(ϕ_R_sb - ϕ_R))
     end
+end
+
 end

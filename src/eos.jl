@@ -1,3 +1,9 @@
+module EOSType
+
+using Unitful, StaticArrays
+
+export IdealEOS, total_enthalpy, sound_speed, pressure, specific_total_energy, cons2prim
+
 """Ideal gas equation of state as a function of γ"""
 struct IdealEOS{T<:AbstractFloat}
     γ::T  # polytropic index
@@ -12,7 +18,7 @@ end
 function IdealEOS(γ::T, R=287.05u"J * kg^-1 * K^-1") where {T<:Real}
     R = ustrip(u"erg * g^-1 * K^-1", R)
 
-    _inv_γ_m_1 = round(1 / (γ - 1), sigdigits=15)
+    _inv_γ_m_1 = round(1 / (γ - 1); sigdigits=15)
     _γ_m_1 = 1 / _inv_γ_m_1
     _γ_over_γ_m_1 = γ / (γ - 1)
 
@@ -37,4 +43,6 @@ function cons2prim(EOS::IdealEOS, U)
     p = ρ * EOS._γ_m_1 * (E - 0.5(u^2 + v^2))
 
     return @SVector [ρ, u, v, p]
+end
+
 end

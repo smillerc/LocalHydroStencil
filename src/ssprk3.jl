@@ -1,19 +1,28 @@
+module SSPRKType
+
+using Polyester, StaticArrays, .Threads, Adapt
+
+using ..StencilType
+using ..EOSType
+
+export SSPRK3IntegratorCPU, integerate!
+
 abstract type SSPRK3Integrator end
 
-struct SSPRK3IntegratorCPU{T<:Number,AT<:AbstractArray{T},B} <: SSPRK3Integrator
+struct SSPRK3IntegratorCPU{T<:Number,AT<:AbstractArray{T}} <: SSPRK3Integrator
     U⃗1::AT
     U⃗2::AT
     U⃗3::AT
-    blocks::B
+    # blocks::B
 end
 
-struct SSPRK3IntegratorCPUSplit{T<:Number,AT<:AbstractArray{T},B} <: SSPRK3Integrator
-    U⃗1::AT
-    U⃗2::AT
-    U⃗3::AT
-    iblocks::B
-    jblocks::B
-end
+# struct SSPRK3IntegratorCPUSplit{T<:Number,AT<:AbstractArray{T},B} <: SSPRK3Integrator
+#     U⃗1::AT
+#     U⃗2::AT
+#     U⃗3::AT
+#     iblocks::B
+#     jblocks::B
+# end
 
 struct SSPRK3IntegratorGPU{T<:Number,AT<:AbstractArray{T}} <: SSPRK3Integrator
     U⃗1::AT
@@ -30,40 +39,26 @@ function SSPRK3IntegratorCPU(U)
     fill!(U2, 0)
     fill!(U3, 0)
 
-    blocks = @SVector [MArray{Tuple{4,5,5},Float64}(undef) for _ in 1:nthreads()]
+    # blocks = @SVector [MArray{Tuple{4,5,5},Float64}(undef) for _ in 1:nthreads()]
 
-    SSPRK3IntegratorCPU(U1, U2, U3, blocks)
+    return SSPRK3IntegratorCPU(U1, U2, U3)
 end
 
-function SSPRK3IntegratorCPU(U)
-    U1 = similar(U)
-    U2 = similar(U)
-    U3 = similar(U)
+# function SSPRK3IntegratorCPUSplit(U)
+#     U1 = similar(U)
+#     U2 = similar(U)
+#     U3 = similar(U)
+#     T = eltype(U)
 
-    fill!(U1, 0)
-    fill!(U2, 0)
-    fill!(U3, 0)
+#     fill!(U1, 0)
+#     fill!(U2, 0)
+#     fill!(U3, 0)
 
-    blocks = @SVector [MArray{Tuple{4,5,5},Float64}(undef) for _ in 1:nthreads()]
+#     iblocks = @SVector [MMatrix{4,5,T,20}(undef) for _ in 1:nthreads()]
+#     jblocks = @SVector [MMatrix{4,5,T,20}(undef) for _ in 1:nthreads()]
 
-    SSPRK3IntegratorCPU(U1, U2, U3, blocks)
-end
-
-function SSPRK3IntegratorCPUSplit(U)
-    U1 = similar(U)
-    U2 = similar(U)
-    U3 = similar(U)
-    T = eltype(U)
-
-    fill!(U1, 0)
-    fill!(U2, 0)
-    fill!(U3, 0)
-
-    iblocks = @SVector [MMatrix{4,5,T,20}(undef) for _ in 1:nthreads()]
-    jblocks = @SVector [MMatrix{4,5,T,20}(undef) for _ in 1:nthreads()]
-
-    SSPRK3IntegratorCPUSplit(U1, U2, U3, iblocks, jblocks)
-end
+#     return SSPRK3IntegratorCPUSplit(U1, U2, U3, iblocks, jblocks)
+# end
 
 function SSPRK3IntegratorGPU(U)
     U1 = similar(U)
@@ -74,22 +69,63 @@ function SSPRK3IntegratorGPU(U)
     fill!(U2, 0)
     fill!(U3, 0)
 
-    SSPRK3IntegratorGPU(U1, U2, U3)
+    return SSPRK3IntegratorGPU(U1, U2, U3)
 end
-
 
 function Adapt.adapt_structure(to, SS::SSPRK3IntegratorGPU)
     U1 = Adapt.adapt_structure(to, SS.U⃗1)
     U2 = Adapt.adapt_structure(to, SS.U⃗2)
     U3 = Adapt.adapt_structure(to, SS.U⃗3)
 
-    SSPRK3IntegratorGPU(U1, U2, U3)
+    return SSPRK3IntegratorGPU(U1, U2, U3)
 end
 
+function sync_halo!(U)
+    ilohi = axes(U, 2)
+    jlohi = axes(U, 3)
+    ilo = first(ilohi) + 2
+    jlo = first(jlohi) + 2
+    ihi = last(ilohi) - 2
+    jhi = last(jlohi) - 2
 
-@inbounds function SSPRK3(SS::SSPRK3Integrator, U⃗n::AbstractArray{T},
-    riemann_solver, mesh, EOS, dt) where {T}
+    for j in 1:(jlo - 1)
+        for i in ilo:ihi
+            for q in axes(U, 1)
+                U[q, i, j] = U[q, i, jlo]
+            end
+        end
+    end
 
+    for j in (jhi - 2):last(jlohi)
+        for i in ilo:ihi
+            for q in axes(U, 1)
+                U[q, i, j] = U[q, i, jhi]
+            end
+        end
+    end
+
+    for j in jlo:jhi
+        for i in first(ilohi):(ilo - 1)
+            for q in axes(U, 1)
+                U[q, i, j] = U[q, ilo, j]
+            end
+        end
+    end
+
+    for j in jlo:jhi
+        for i in (ihi - 2):last(ilohi)
+            for q in axes(U, 1)
+                U[q, i, j] = U[q, ihi, j]
+            end
+        end
+    end
+
+    return nothing
+end
+
+@inbounds function integerate!(
+    SS::SSPRK3Integrator, U⃗n::AbstractArray{T}, riemann_solver, mesh, EOS, dt
+) where {T}
     nhalo = mesh.nhalo
     ilohi = axes(U⃗n, 2)
     jlohi = axes(U⃗n, 3)
@@ -170,4 +206,6 @@ end
     sync_halo!(U⃗3)
 
     return nothing
+end
+
 end

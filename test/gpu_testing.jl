@@ -13,8 +13,8 @@ include("stencil_mod.jl")
 eos = IdealEOS(1.4)
 # x = 0:.5e-3:1 |> collect
 # y = 0:.5e-3:1 |> collect
-x = 0:2e-2:1 |> collect
-y = 0:2e-2:1 |> collect
+x = collect(0:2e-2:1)
+y = collect(0:2e-2:1)
 nhalo = 2
 cmesh = CartesianMesh(x, y, nhalo)
 M = length(x) - 1 # 270
@@ -29,11 +29,11 @@ u0 = zeros(M, N)
 v0 = zeros(M, N)
 p0 = zeros(M, N)
 
-ρ0[begin:N÷2, :] .= ρL
-ρ0[N÷2:end, :] .= ρR
+ρ0[begin:(N ÷ 2), :] .= ρL
+ρ0[(N ÷ 2):end, :] .= ρR
 
-p0[begin:N÷2, :] .= pL
-p0[N÷2:end, :] .= pR
+p0[begin:(N ÷ 2), :] .= pL
+p0[(N ÷ 2):end, :] .= pR
 
 E0 = specific_total_energy.(Ref(eos), ρ0, u0, v0, p0);
 
@@ -57,16 +57,17 @@ RS = M_AUSMPWPlus2D()
 # -------------------------------------------------------------------------
 const Device = CUDADevice
 
-
 U⃗ = adapt(CuArray, U⃗0)
 time_int_gpu = SSPRK3IntegratorGPU(U⃗);
-mesh_gpu = cu(cmesh) 
-eos_gpu = cu(eos) 
+mesh_gpu = cu(cmesh)
+eos_gpu = cu(eos)
 
 # SSPRK_kernel = SSPRK3_gpu!(Device(), (32,32))
-SSPRK_kernel = SSPRK3_gpu_lmem!(Device(), (32,32))
+SSPRK_kernel = SSPRK3_gpu_lmem!(Device(), (32, 32))
 
-kernel_event = SSPRK_kernel(time_int_gpu, U⃗, RS, mesh_gpu, eos_gpu, dt, Val(cmesh.nhalo), ndrange=(M,N))
+kernel_event = SSPRK_kernel(
+    time_int_gpu, U⃗, RS, mesh_gpu, eos_gpu, dt, Val(cmesh.nhalo); ndrange=(M, N)
+)
 wait(kernel_event)
 
 # @benchmark begin

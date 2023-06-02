@@ -10,8 +10,8 @@ include("stencil_mod.jl")
 
 eos = IdealEOS(1.4)
 dx = 1e-3
-x = -.2:dx:.2 |> collect
-y = -.2:dx:.2 |> collect
+x = collect(-0.2:dx:0.2)
+y = collect(-0.2:dx:0.2)
 
 nhalo = 2
 mesh = CartesianMesh(x, y, nhalo)
@@ -27,11 +27,11 @@ u0 = zeros(M, N)
 v0 = zeros(M, N)
 p0 = zeros(M, N)
 
-ρ0[begin:N÷2, :] .= ρL
-ρ0[N÷2:end, :] .= ρR
+ρ0[begin:(N ÷ 2), :] .= ρL
+ρ0[(N ÷ 2):end, :] .= ρR
 
-p0[begin:N÷2, :] .= pL
-p0[N÷2:end, :] .= pR
+p0[begin:(N ÷ 2), :] .= pL
+p0[(N ÷ 2):end, :] .= pR
 
 E0 = specific_total_energy.(Ref(eos), ρ0, u0, v0, p0)
 
@@ -53,24 +53,24 @@ end
 ρv = @view U⃗[3, :, :]
 ρE = @view U⃗[4, :, :]
 
-
 RS = M_AUSMPWPlus2D()
 time_int = SSPRK3IntegratorCPU(U⃗)
 # time_int2 = SSPRK3IntegratorCPUSplit(U⃗)
 
-
 CFL = 0.8
-dt = CFL*next_Δt(U⃗, mesh, eos)
+dt = CFL * next_Δt(U⃗, mesh, eos)
 
 t = 0.0
 
 for iter in 1:500
     println("i=$iter, t=$t, dt=$dt")
-    if t > 0.1 break end
-    global dt = CFL*next_Δt(U⃗, mesh, eos)
+    if t > 0.1
+        break
+    end
+    global dt = CFL * next_Δt(U⃗, mesh, eos)
     # SSPRK3(time_int,U⃗,RS,mesh,eos,dt)
     # SSPRK3_gc_preserve(time_int,U⃗,RS,mesh,eos,dt)
-    SSPRK3_vec(time_int,U⃗,RS,mesh,eos,dt)
+    SSPRK3_vec(time_int, U⃗, RS, mesh, eos, dt)
     # SSPRK3(time_int,U⃗,RS,mesh,eos,dt)
     copy!(U⃗, time_int.U⃗3)
     global t += dt
@@ -78,11 +78,10 @@ end
 
 xc = cumsum(diff(x));
 fig = Figure();
-ax = Axis(fig[1,1]);
-lines!(ax, xc, U⃗[1,:,N÷2]);
+ax = Axis(fig[1, 1]);
+lines!(ax, xc, U⃗[1, :, N ÷ 2]);
 fig
 save("sod.png", fig)
-
 
 # println("SSPRK3")
 # @benchmark SSPRK3($time_int,$U⃗,$RS,$mesh,$eos,$dt)
@@ -92,23 +91,20 @@ save("sod.png", fig)
 
 # println("SSPRK3_init_wrong")
 # @benchmark SSPRK3_init_wrong($time_int,$U⃗,$RS,$mesh,$eos,$dt)
-    
+
 # println("SSPRK3Split")
 # @benchmark SSPRK3Split($time_int,$U⃗,$RS,$mesh,$eos,$dt)
 
 # println("SSPRK3_vec, nthreads=$(nthreads())")
 # @btime SSPRK3_vec($time_int,$U⃗,$RS,$mesh,$eos,$dt)
 
-
 # @perfmon "FLOPS_DP" SSPRK3_vec(time_int,U⃗,RS,mesh,eos,dt)
 # @profview SSPRK3_vec(time_int,U⃗,RS,mesh,eos,dt)
 # SSPRK3_vec(time_int,U⃗,RS,mesh,eos,dt)
-    
 
 # @benchmark begin
 #     getblock_static($U⃗,50,50)
 # end
-
 
 # println("getblock_static")
 # @benchmark begin
@@ -129,7 +125,6 @@ save("sod.png", fig)
 # getblock_marray(U⃗,50,50)
 
 # StrideArrays.@gc_preserve getblock_marray(U⃗,50,50)
-
 
 # @code_warntype getview(U⃗,50,50)
 # @code_warntype get_block(U⃗,50,50)
@@ -196,5 +191,3 @@ save("sod.png", fig)
 
 # show(timeo)
 # end
-
-

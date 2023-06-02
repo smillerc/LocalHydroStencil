@@ -1,3 +1,8 @@
+module ReconstructionType
+
+using StaticArrays
+
+export muscl, minmod, superbee
 
 @inline minmod(r) = max(0, min(r, 1))
 @inline superbee(r) = max(0, min(2r, 1), min(r, 2))
@@ -31,4 +36,6 @@ function muscl(ϕᵢ₋₂, ϕᵢ₋₁, ϕᵢ, ϕᵢ₊₁, ϕᵢ₊₂, limite
     ϕ_L⁻ = ϕᵢ₋₁ + 0.5lim_L⁻ * Δ_minus_half       # i-1/2
 
     return @SVector [(ϕ_L⁻, ϕ_R⁻), (ϕ_L⁺, ϕ_R⁺)]
+end
+
 end

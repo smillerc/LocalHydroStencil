@@ -1,10 +1,9 @@
 function next_Δt(U::AbstractArray{T}, mesh, EOS) where {T}
-    _next_Δt(U, mesh, EOS, Val(nthreads()))
+    return _next_Δt(U, mesh, EOS, Val(nthreads()))
     # _next_Δt(U, mesh, EOS)
 end
 
 function _next_Δt(U::AbstractArray{T}, mesh, EOS) where {T}
-
     nhalo = mesh.nhalo
     ilohi = axes(U, 2)
     jlohi = axes(U, 3)
@@ -13,34 +12,33 @@ function _next_Δt(U::AbstractArray{T}, mesh, EOS) where {T}
     ihi = last(ilohi) - nhalo
     jhi = last(jlohi) - nhalo
 
-    Δt_min = Inf 
-    
+    Δt_min = Inf
+
     ΔS_face = mesh.facelen
     vol = mesh.volume
     norms = mesh.facenorms
 
     for j in jlo:jhi
         for i in ilo:ihi
-            
-            n̂ = view(norms,:,:,i,j)
-            n1x = n̂[1,1] 
-            n1y = n̂[2,1] 
-            n2x = n̂[1,2] 
-            n2y = n̂[2,2] 
-            n3x = n̂[1,3] 
-            n3y = n̂[2,3] 
-            n4x = n̂[1,4] 
-            n4y = n̂[2,4]
+            n̂ = view(norms, :, :, i, j)
+            n1x = n̂[1, 1]
+            n1y = n̂[2, 1]
+            n2x = n̂[1, 2]
+            n2y = n̂[2, 2]
+            n3x = n̂[1, 3]
+            n3y = n̂[2, 3]
+            n4x = n̂[1, 4]
+            n4y = n̂[2, 4]
 
             s1 = ΔS_face[1, i, j]
             s2 = ΔS_face[2, i, j]
             s3 = ΔS_face[3, i, j]
             s4 = ΔS_face[4, i, j]
 
-            ρ = U[1,i,j]
-            u = U[2,i,j] / ρ
-            v = U[3,i,j] / ρ
-            E = U[4,i,j] / ρ
+            ρ = U[1, i, j]
+            u = U[2, i, j] / ρ
+            v = U[3, i, j] / ρ
+            E = U[4, i, j] / ρ
 
             p = pressure(EOS, ρ, u, v, E)
             cs = sound_speed(EOS, ρ, p)
@@ -66,7 +64,6 @@ function _next_Δt(U::AbstractArray{T}, mesh, EOS) where {T}
 end
 
 function _next_Δt(U::AbstractArray{T}, mesh, EOS, ::Val{NT}) where {T,NT}
-
     nhalo = mesh.nhalo
     ilohi = axes(U, 2)
     jlohi = axes(U, 3)
@@ -76,36 +73,35 @@ function _next_Δt(U::AbstractArray{T}, mesh, EOS, ::Val{NT}) where {T,NT}
     jhi = last(jlohi) - nhalo
 
     Δt_min = @MVector ones(NT)
-    Δt_min .*= Inf 
-    
+    Δt_min .*= Inf
+
     ΔS_face = mesh.facelen
     vol = mesh.volume
     norms = mesh.facenorms
 
-    @batch per=thread for j in jlo:jhi
+    @batch per = thread for j in jlo:jhi
         for i in ilo:ihi
-            
             tid = threadid()
 
-            n̂ = view(norms,:,:,i,j)
-            n1x = n̂[1,1] 
-            n1y = n̂[2,1] 
-            n2x = n̂[1,2] 
-            n2y = n̂[2,2] 
-            n3x = n̂[1,3] 
-            n3y = n̂[2,3] 
-            n4x = n̂[1,4] 
-            n4y = n̂[2,4]
+            n̂ = view(norms, :, :, i, j)
+            n1x = n̂[1, 1]
+            n1y = n̂[2, 1]
+            n2x = n̂[1, 2]
+            n2y = n̂[2, 2]
+            n3x = n̂[1, 3]
+            n3y = n̂[2, 3]
+            n4x = n̂[1, 4]
+            n4y = n̂[2, 4]
 
             s1 = ΔS_face[1, i, j]
             s2 = ΔS_face[2, i, j]
             s3 = ΔS_face[3, i, j]
             s4 = ΔS_face[4, i, j]
 
-            ρ = U[1,i,j]
-            u = U[2,i,j] / ρ
-            v = U[3,i,j] / ρ
-            E = U[4,i,j] / ρ
+            ρ = U[1, i, j]
+            u = U[2, i, j] / ρ
+            v = U[3, i, j] / ρ
+            E = U[4, i, j] / ρ
 
             p = pressure(EOS, ρ, u, v, E)
             cs = sound_speed(EOS, ρ, p)
