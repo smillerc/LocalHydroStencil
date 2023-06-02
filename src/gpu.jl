@@ -1,10 +1,73 @@
 
 using OffsetArrays
 
+@inbounds function cs_gpu!(U::AbstractArray{T,3}, cs::AbstractArray{T,2}, eos) where {T}
+    idx = (blockIdx().x - 1) * blockDim().x + threadIdx().x
+    idy = (blockIdx().y - 1) * blockDim().y + threadIdx().y
+
+    strx = blockDim().x * gridDim().x
+    stry = blockDim().y * gridDim().y
+
+    _, Nx, Ny = size(U⃗n)
+    ihi = Nx - 3
+    jhi = Ny - 3
+    ilo = 3
+    jlo = 3
+
+    if (ilo <= idx <= ihi) && (jlo <= idy <= jhi)
+        for j = idy:stry:jhi
+            for i = idx:strx:ihi
+                ρ = U[1, i, j]
+                u = U[2, i, j] / ρ
+                v = U[3, i, j] / ρ
+                E = U[4, i, j] / ρ
+                p = pressure(eos, ρ, u, v, E)
+
+                cs[i, j] = sound_speed(eos, ρ, p)
+            end
+        end
+    end
+end
+
+function getvec(A::AbstractArray{T,3}, i, j) where {T}
+    SVector{4,T}(view(A, 1:4, i, j))
+end
+
+function get_nhat(mesh::CartesianMesh{T}, i, j) where T
+    SMatrix{2,4,T}(view(mesh.facenorms,1:2,1:4,i,j))
+end
+
+function get_ΔS(mesh::CartesianMesh{T}, i, j) where T
+    SVector{4,T}(view(mesh.facelen,1:4,i,j))
+end
+
+@inbounds function getgpublock(A::AbstractArray{T,3}, i, j, nh) where {T}
+    S = Tuple{4,5,5}
+    block = MArray{S,T}(undef)
+    aview = view(A, :, i-nh:i+nh, j-nh:j+nh)
+    for i in eachindex(block)
+        @inbounds block[i] = aview[i]
+    end
+    return SArray(block)
+end
+
+function _2halo2dstencil(U⃗::AbstractArray{T,3}, Idx, mesh, EOS::E, nh) where {T,E}
+    i, j = Idx
+    U_local = getblock(U⃗, i, j, nh)
+    S⃗ = @SVector zeros(4)
+    n̂ = get_nhat(mesh, i, j)
+    ΔS = get_ΔS(mesh, i, j)
+    Ω = mesh.volume[i,j]
+    BT = SArray{Tuple{4,5,5},T,3,100}
+
+    return Stencil9Point{T,BT,E}(U_local, S⃗, n̂, ΔS, Ω, EOS)
+end
+
+
 function gpu_2halo2dstencil(U⃗::AbstractArray{T,N}, Idx) where {T,N}
 	i,j = Idx
 
-    U_local = getblock(U⃗,i,j)
+    U_local = getgpublock(U⃗,i,j,2)
     
 	S⃗ = @SVector zeros(4)
 	n̂ = @SMatrix [0.0;-1.0;;1.0;0.0;;0.0;1.0;;-1.0;0.0]

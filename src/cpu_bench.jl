@@ -3,21 +3,6 @@ using .Threads, BenchmarkTools
 using ThreadPinning
 using KernelAbstractions
 
-# pinthreads(:compact)
-
-# struct CartesianMesh{T,
-# 	AA2<:AbstractArray{T,2}, 
-# 	AA3<:AbstractArray{T,3}, 
-# 	AA4<:AbstractArray{T,4}
-#     }
-#     xy::AA3
-#     centroid::AA3
-#     volume::AA2
-#     facenorms::AA4
-#     facelen::AA3
-#     nhalo::Int
-# end
-
 include("stencil_mod.jl")
 
 
