@@ -1,6 +1,5 @@
 
 using .Threads, BenchmarkTools
-# using ThreadPinning
 using LocalHydroStencil
 
 eos = IdealEOS(1.4)
@@ -54,9 +53,7 @@ RS = M_AUSMPWPlus2D()
 time_int = SSPRK3IntegratorCPU(U⃗)
 
 println("nthreads: ", nthreads())
-integrate!(time_int, U⃗, RS, mesh, eos, dt)
+integrate!(time_int, U⃗, RS, mesh, eos, dt, muscl, minmod)
 @benchmark begin
-    for _ in 1:10
-        integrate!($time_int, $U⃗, $RS, $mesh, $eos, $dt)
-    end
+    integrate!($time_int, $U⃗, $RS, $mesh, $eos, $dt, $muscl, $minmod)
 end
