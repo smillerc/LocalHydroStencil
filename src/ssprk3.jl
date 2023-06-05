@@ -126,8 +126,8 @@ function sync_halo!(U)
 end
 
 @inbounds function integrate!(
-    SS::SSPRK3Integrator, U⃗n::AbstractArray{T}, riemann_solver, mesh, EOS, dt
-) where {T}
+    SS::SSPRK3Integrator, U⃗n::AbstractArray{T}, riemann_solver, mesh, EOS, dt, recon::F1, limiter::F2
+) where {T,F1,F2}
     nhalo = mesh.nhalo
     ilohi = axes(U⃗n, 2)
     jlohi = axes(U⃗n, 3)
@@ -157,7 +157,7 @@ end
             ΔS = ΔS_face[i, j]
             Ω = vol[i, j]
             stencil = Stencil9Point(U_local, S⃗, n̂, ΔS, Ω, EOS)
-            ∂U⁽ⁿ⁾∂t = ∂U∂t(riemann_solver, stencil, muscl, minmod)
+            ∂U⁽ⁿ⁾∂t = ∂U∂t(riemann_solver, stencil, recon, limiter)
             U⁽¹⁾ = U⁽ⁿ⁾ + ∂U⁽ⁿ⁾∂t * dt
             U⃗1[:, i, j] = U⁽¹⁾
         end
@@ -178,7 +178,7 @@ end
             ΔS = ΔS_face[i, j]
             Ω = vol[i, j]
             stencil = Stencil9Point(U_local, S⃗, n̂, ΔS, Ω, EOS)
-            ∂U⁽¹⁾∂t = ∂U∂t(riemann_solver, stencil, muscl, minmod)
+            ∂U⁽¹⁾∂t = ∂U∂t(riemann_solver, stencil, recon, limiter)
             U⁽²⁾ = 0.75U⁽ⁿ⁾ + 0.25U⁽¹⁾ + ∂U⁽¹⁾∂t * 0.25dt
             U⃗2[:, i, j] = U⁽²⁾
         end
@@ -199,7 +199,7 @@ end
             ΔS = ΔS_face[i, j]
             Ω = vol[i, j]
             stencil = Stencil9Point(U_local, S⃗, n̂, ΔS, Ω, EOS)
-            ∂U⁽²⁾∂t = ∂U∂t(riemann_solver, stencil, muscl, minmod)
+            ∂U⁽²⁾∂t = ∂U∂t(riemann_solver, stencil, recon, limiter)
             U⁽ⁿ⁺¹⁾ = (1 / 3) * U⁽ⁿ⁾ + (2 / 3) * U⁽²⁾ + ∂U⁽²⁾∂t * (2 / 3) * dt
             U⃗3[:, i, j] = U⁽ⁿ⁺¹⁾
         end
