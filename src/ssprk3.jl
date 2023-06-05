@@ -4,8 +4,10 @@ using Polyester, StaticArrays, .Threads, Adapt
 
 using ..StencilType
 using ..EOSType
+using ..ReconstructionType
+using ..RiemannSolverType
 
-export SSPRK3IntegratorCPU, integerate!
+export SSPRK3IntegratorCPU, integrate!
 
 abstract type SSPRK3Integrator end
 
@@ -123,7 +125,7 @@ function sync_halo!(U)
     return nothing
 end
 
-@inbounds function integerate!(
+@inbounds function integrate!(
     SS::SSPRK3Integrator, U⃗n::AbstractArray{T}, riemann_solver, mesh, EOS, dt
 ) where {T}
     nhalo = mesh.nhalo
@@ -155,7 +157,7 @@ end
             ΔS = ΔS_face[i, j]
             Ω = vol[i, j]
             stencil = Stencil9Point(U_local, S⃗, n̂, ΔS, Ω, EOS)
-            ∂U⁽ⁿ⁾∂t = ∂U∂tvec(riemann_solver, stencil, muscl, minmod)
+            ∂U⁽ⁿ⁾∂t = ∂U∂t(riemann_solver, stencil, muscl, minmod)
             U⁽¹⁾ = U⁽ⁿ⁾ + ∂U⁽ⁿ⁾∂t * dt
             U⃗1[:, i, j] = U⁽¹⁾
         end
@@ -176,7 +178,7 @@ end
             ΔS = ΔS_face[i, j]
             Ω = vol[i, j]
             stencil = Stencil9Point(U_local, S⃗, n̂, ΔS, Ω, EOS)
-            ∂U⁽¹⁾∂t = ∂U∂tvec(riemann_solver, stencil, muscl, minmod)
+            ∂U⁽¹⁾∂t = ∂U∂t(riemann_solver, stencil, muscl, minmod)
             U⁽²⁾ = 0.75U⁽ⁿ⁾ + 0.25U⁽¹⁾ + ∂U⁽¹⁾∂t * 0.25dt
             U⃗2[:, i, j] = U⁽²⁾
         end
@@ -197,7 +199,7 @@ end
             ΔS = ΔS_face[i, j]
             Ω = vol[i, j]
             stencil = Stencil9Point(U_local, S⃗, n̂, ΔS, Ω, EOS)
-            ∂U⁽²⁾∂t = ∂U∂tvec(riemann_solver, stencil, muscl, minmod)
+            ∂U⁽²⁾∂t = ∂U∂t(riemann_solver, stencil, muscl, minmod)
             U⁽ⁿ⁺¹⁾ = (1 / 3) * U⁽ⁿ⁾ + (2 / 3) * U⁽²⁾ + ∂U⁽²⁾∂t * (2 / 3) * dt
             U⃗3[:, i, j] = U⁽ⁿ⁺¹⁾
         end

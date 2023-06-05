@@ -14,13 +14,11 @@ export Stencil9Point, get_block
 
 include("mausmpw_riemann_solver.jl")
 using .RiemannSolverType
-
+export M_AUSMPWPlus2D, MAUSMPW⁺, ∂U∂t
 
 include("ssprk3.jl")
 using .SSPRKType
 export SSPRK3IntegratorCPU, integrate!
-
-
 
 include("mesh.jl")
 using .MeshType
