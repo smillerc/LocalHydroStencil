@@ -82,13 +82,13 @@ function Adapt.adapt_structure(to, SS::SSPRK3IntegratorGPU)
     return SSPRK3IntegratorGPU(U1, U2, U3)
 end
 
-function sync_halo!(U)
+function sync_halo!(U, nhalo)
     ilohi = axes(U, 2)
     jlohi = axes(U, 3)
-    ilo = first(ilohi) + 2
-    jlo = first(jlohi) + 2
-    ihi = last(ilohi) - 2
-    jhi = last(jlohi) - 2
+    ilo = first(ilohi) + nhalo
+    jlo = first(jlohi) + nhalo
+    ihi = last(ilohi) - nhalo
+    jhi = last(jlohi) - nhalo
 
     for j in 1:(jlo - 1)
         for i in ilo:ihi
@@ -98,7 +98,7 @@ function sync_halo!(U)
         end
     end
 
-    for j in (jhi - 2):last(jlohi)
+    for j in (jhi - nhalo):last(jlohi)
         for i in ilo:ihi
             for q in axes(U, 1)
                 U[q, i, j] = U[q, i, jhi]
@@ -115,7 +115,7 @@ function sync_halo!(U)
     end
 
     for j in jlo:jhi
-        for i in (ihi - 2):last(ilohi)
+        for i in (ihi - nhalo):last(ilohi)
             for q in axes(U, 1)
                 U[q, i, j] = U[q, ihi, j]
             end
@@ -126,7 +126,14 @@ function sync_halo!(U)
 end
 
 @inbounds function integrate!(
-    SS::SSPRK3Integrator, U⃗n::AbstractArray{T}, riemann_solver, mesh, EOS, dt, recon::F1, limiter::F2
+    SS::SSPRK3Integrator,
+    U⃗n::AbstractArray{T},
+    riemann_solver::AbstractRiemannSolver,
+    mesh::CartesianMesh,
+    EOS::AbstractEOS,
+    dt::Number,
+    recon::F1,
+    limiter::F2,
 ) where {T,F1,F2}
     nhalo = mesh.nhalo
     ilohi = axes(U⃗n, 2)
@@ -163,7 +170,7 @@ end
         end
     end
 
-    sync_halo!(U⃗1)
+    sync_halo!(U⃗1, nhalo)
 
     # Stage 2
     @batch per = thread for j in jlo:jhi
@@ -184,7 +191,7 @@ end
         end
     end
 
-    sync_halo!(U⃗2)
+    sync_halo!(U⃗2, nhalo)
 
     # Stage 3
     @batch per = thread for j in jlo:jhi
@@ -205,7 +212,7 @@ end
         end
     end
 
-    sync_halo!(U⃗3)
+    sync_halo!(U⃗3, nhalo)
 
     return nothing
 end

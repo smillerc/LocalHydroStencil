@@ -7,8 +7,7 @@ using ..EOSType
 using ..ReconstructionType
 using ..StencilType
 
-export M_AUSMPWPlus2D, MAUSMPW⁺,∂U∂t
-
+export M_AUSMPWPlus2D, MAUSMPW⁺, ∂U∂t
 
 abstract type AbstractRiemannSolver end
 struct M_AUSMPWPlus2D <: AbstractRiemannSolver end
@@ -37,7 +36,7 @@ function ∂U∂t(
 
     # If the entire block is uniform, skip the riemann solve and just return 
     if all_same(U⃗)
-        return @SVector zeros(size(stencil.S⃗,1))
+        return @SVector zeros(size(stencil.S⃗, 1))
     end
     # Conserved to primitive variables
     # W⃗ = cons2prim.(Ref(EOS), ρ, ρu, ρv, ρE)
@@ -188,7 +187,6 @@ function ∂U∂t(
 
     return dUdt
 end
-
 
 function MAUSMPW⁺(
     n̂,
