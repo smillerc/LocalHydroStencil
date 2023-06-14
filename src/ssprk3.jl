@@ -128,12 +128,12 @@ end
 @inbounds function integrate!(
     SS::SSPRK3Integrator,
     U⃗n::AbstractArray{T},
-    riemann_solver::AbstractRiemannSolver,
-    mesh::CartesianMesh,
-    EOS::AbstractEOS,
+    riemann_solver,
+    mesh,
+    EOS,
     dt::Number,
     recon::F1,
-    limiter::F2,
+    limiter::F2, skip_uniform=true
 ) where {T,F1,F2}
     nhalo = mesh.nhalo
     ilohi = axes(U⃗n, 2)

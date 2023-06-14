@@ -29,15 +29,18 @@ function all_same(blk)
 end
 
 function ∂U∂t(
-    ::M_AUSMPWPlus2D, stencil::Stencil9Point, recon::F1, limiter::F2
+    ::M_AUSMPWPlus2D, stencil::Stencil9Point, recon::F1, limiter::F2, skip_uniform=true
 ) where {F1,F2}
     U⃗ = stencil.U⃗
     EOS = stencil.EOS
 
     # If the entire block is uniform, skip the riemann solve and just return 
-    if all_same(U⃗)
-        return @SVector zeros(size(stencil.S⃗, 1))
+    if skip_uniform
+        if all_same(U⃗)
+            return @SVector zeros(size(stencil.S⃗, 1))
+        end
     end
+
     # Conserved to primitive variables
     # W⃗ = cons2prim.(Ref(EOS), ρ, ρu, ρv, ρE)
     W⃗ = cons2prim.(Ref(EOS), U⃗)
@@ -314,12 +317,10 @@ function MAUSMPW⁺(
     return SVector{4,Float64}(ρflux, ρuflux, ρvflux, Eflux)
 end
 
-@inline function pressure_based_weight_function(
-    p_L::T, p_R::T, p_s::T, min_neighbor_press::T
-) where {T}
+@inline function pressure_based_weight_function(p_L, p_R, p_s, min_neighbor_press)
     if abs(p_s) < typemin(T) # p_s == 0
-        f_L = zero(T)
-        f_R = zero(T)
+        f_L = 0.0
+        f_R = 0.0
     else
         min_term = min(1.0, min_neighbor_press / min(p_L, p_R))^2
 
@@ -336,14 +337,14 @@ end
     return f_L, f_R
 end
 
-@inline function discontinuity_sensor(p_L::T, p_R::T) where {T}
+@inline function discontinuity_sensor(p_L, p_R)
     min_term = min((p_L / p_R), (p_R / p_L))
     w = 1 - (min_term * min_term * min_term)
     w = w * (abs(w) >= ϵ)
     return w
 end
 
-@inline function pressure_split_plus(M::T; α=zero(T)) where {T}
+@inline function pressure_split_plus(M; α=0.0)
     if abs(M) > 1
         P⁺ = 0.5(1 + sign(M))
     else #  |M| <= 1
@@ -352,7 +353,7 @@ end
     return P⁺
 end
 
-@inline function pressure_split_minus(M::T; α=zero(T)) where {T}
+@inline function pressure_split_minus(M; α=0.0)
     if abs(M) > 1
         P⁻ = 0.5(1 - sign(M))
     else #  |M| <= 1
@@ -422,8 +423,8 @@ end
 end
 
 @inline function modified_discontinuity_sensor_ξ(
-    p̄ᵢⱼ::T, p̄ᵢ₊₁ⱼ::T, p̄ᵢ₊₁ⱼ₊₁::T, p̄ᵢ₊₁ⱼ₋₁::T, p̄ᵢⱼ₊₁::T, p̄ᵢⱼ₋₁::T
-) where {T}
+    p̄ᵢⱼ, p̄ᵢ₊₁ⱼ, p̄ᵢ₊₁ⱼ₊₁, p̄ᵢ₊₁ⱼ₋₁, p̄ᵢⱼ₊₁, p̄ᵢⱼ₋₁
+)
     Δp = abs(p̄ᵢ₊₁ⱼ - p̄ᵢⱼ)
     Δpᵢ₊₁ = abs(p̄ᵢ₊₁ⱼ₊₁ - p̄ᵢ₊₁ⱼ₋₁)
     Δpᵢ = abs(p̄ᵢⱼ₊₁ - p̄ᵢⱼ₋₁)
@@ -432,15 +433,13 @@ end
         (1 - min(1, Δp / (0.25(Δpᵢ₊₁ + Δpᵢ))))^2 *
         (1 - min((p̄ᵢⱼ / p̄ᵢ₊₁ⱼ), (p̄ᵢ₊₁ⱼ / p̄ᵢⱼ)))^2
     if isnan(w₂) || abs(w₂) < ϵ
-        w₂ = zero(T)
+        w₂ = 0.0
     end
 
     return w₂
 end
 
-@inline function w2_ξ(
-    p̄ᵢⱼ::T, p̄ᵢ₊₁ⱼ::T, p̄ᵢ₊₁ⱼ₊₁::T, p̄ᵢ₊₁ⱼ₋₁::T, p̄ᵢⱼ₊₁::T, p̄ᵢⱼ₋₁::T
-) where {T}
+@inline function w2_ξ(p̄ᵢⱼ, p̄ᵢ₊₁ⱼ, p̄ᵢ₊₁ⱼ₊₁, p̄ᵢ₊₁ⱼ₋₁, p̄ᵢⱼ₊₁, p̄ᵢⱼ₋₁)
     denom = 0.25(p̄ᵢ₊₁ⱼ₊₁ + p̄ᵢⱼ₊₁ - p̄ᵢ₊₁ⱼ₋₁ - p̄ᵢⱼ₋₁)
     first_term = (1 - min(1, (p̄ᵢ₊₁ⱼ - p̄ᵢⱼ) / denom))^2
     second_term = (1 - min((p̄ᵢⱼ / p̄ᵢ₊₁ⱼ), (p̄ᵢ₊₁ⱼ / p̄ᵢⱼ)))^2
@@ -449,8 +448,8 @@ end
 end
 
 @inline function modified_discontinuity_sensor_η(
-    p̄ᵢⱼ::T, p̄ᵢ₊₁ⱼ::T, p̄ᵢ₊₁ⱼ₊₁::T, p̄ᵢ₋₁ⱼ₊₁::T, p̄ᵢ₋₁ⱼ::T, p̄ᵢⱼ₊₁::T
-) where {T}
+    p̄ᵢⱼ, p̄ᵢ₊₁ⱼ, p̄ᵢ₊₁ⱼ₊₁, p̄ᵢ₋₁ⱼ₊₁, p̄ᵢ₋₁ⱼ, p̄ᵢⱼ₊₁
+)
     Δp = abs(p̄ᵢⱼ₊₁ - p̄ᵢⱼ)
     Δpⱼ₊₁ = abs(p̄ᵢ₊₁ⱼ₊₁ - p̄ᵢ₋₁ⱼ₊₁)
     Δpⱼ = abs(p̄ᵢ₊₁ⱼ - p̄ᵢ₋₁ⱼ)
@@ -459,15 +458,13 @@ end
         (1 - min(1, Δp / (0.25(Δpⱼ₊₁ + Δpⱼ))))^2 *
         (1 - min((p̄ᵢⱼ / p̄ᵢⱼ₊₁), (p̄ᵢⱼ₊₁ / p̄ᵢⱼ)))^2
     if isnan(w₂) || abs(w₂) < ϵ
-        w₂ = zero(T)
+        w₂ = 0.0
     end
 
     return w₂
 end
 
-@inline function w2_η(
-    p̄ᵢⱼ::T, p̄ᵢ₊₁ⱼ::T, p̄ᵢ₊₁ⱼ₊₁::T, p̄ᵢ₋₁ⱼ₊₁::T, p̄ᵢ₋₁ⱼ::T, p̄ᵢⱼ₊₁::T
-) where {T}
+@inline function w2_η(p̄ᵢⱼ, p̄ᵢ₊₁ⱼ, p̄ᵢ₊₁ⱼ₊₁, p̄ᵢ₋₁ⱼ₊₁, p̄ᵢ₋₁ⱼ, p̄ᵢⱼ₊₁)
     denom = 0.25(p̄ᵢ₊₁ⱼ₊₁ + p̄ᵢ₊₁ⱼ - p̄ᵢ₋₁ⱼ₊₁ - p̄ᵢ₋₁ⱼ)
     first_term = (1 - min(1, (p̄ᵢⱼ₊₁ - p̄ᵢⱼ) / denom))^2
     second_term = (1 - min((p̄ᵢⱼ / p̄ᵢⱼ₊₁), (p̄ᵢⱼ₊₁ / p̄ᵢⱼ)))^2
@@ -475,11 +472,11 @@ end
     return w₂
 end
 
-@inline function modified_f(pʟʀ::T, pₛ::T, w₂::T) where {T}
-    if abs(pₛ) > zero(T)
+@inline function modified_f(pʟʀ, pₛ, w₂)
+    if abs(pₛ) > 0.0
         f = ((pʟʀ / pₛ) - 1) * (1 - w₂)
     else
-        f = zero(T)
+        f = 0.0
     end
     return f
 end
