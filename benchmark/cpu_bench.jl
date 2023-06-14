@@ -1,9 +1,10 @@
 
 using .Threads, BenchmarkTools
 using LocalHydroStencil
+using LIKWID
 
 eos = IdealEOS(1.4)
-dx = 0.001
+dx = 0.0005
 # dx = 4e-4
 x = collect(-0.2:dx:0.2)
 y = collect(-0.2:dx:0.2)
@@ -53,7 +54,29 @@ RS = M_AUSMPWPlus2D()
 time_int = SSPRK3IntegratorCPU(U⃗)
 
 println("nthreads: ", nthreads())
-integrate!(time_int, U⃗, RS, mesh, eos, dt, muscl, minmod)
-@benchmark begin
-    integrate!($time_int, $U⃗, $RS, $mesh, $eos, $dt, $muscl, $minmod)
+
+# Julia threads must be pinned! Printing the thread affinity.
+@threads :static for tid in 1:nthreads()
+    core = LIKWID.get_processor_id()
+    println("Thread $tid, Core $core")
 end
+
+println("N zones: ", length(U⃗))
+skip_uniform = false
+
+# Marker.init()
+integrate!(time_int, U⃗, RS, mesh, eos, dt, muscl, minmod, skip_uniform)
+
+# @benchmark begin
+#     integrate!($time_int, $U⃗, $RS, $mesh, $eos, $dt, $muscl, $minmod)
+# end
+
+
+# @marker "integrate" begin
+    for iter in 1:100
+        println("Iter: ", iter)
+        integrate!(time_int, U⃗, RS, mesh, eos, dt, muscl, minmod, skip_uniform)
+    end
+# end
+
+# Marker.close()
