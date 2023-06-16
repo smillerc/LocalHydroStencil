@@ -39,8 +39,8 @@ function CartesianMesh(x::AbstractVector{T}, y::AbstractVector{T}, nhalo) where 
         SVector{4}(view(facelen, :, i, j)) for j in axes(facelen, 3), i in axes(facelen, 2)
     ]
 
-    # return CartesianMesh(xy, centroid, volume, facenorms, facelen, nhalo)
-    return CartesianMesh(xy, centroid, volume, nhat, dS, nhalo)
+    return CartesianMesh(xy, centroid, volume, facenorms, facelen, nhalo)
+    # return CartesianMesh(xy, centroid, volume, nhat, dS, nhalo)
 end
 
 function Adapt.adapt_structure(to, mesh::CartesianMesh)

@@ -35,11 +35,11 @@ function ∂U∂t(
     EOS = stencil.EOS
 
     # If the entire block is uniform, skip the riemann solve and just return 
-    if skip_uniform
-        if all_same(U⃗)
-            return @SVector zeros(size(stencil.S⃗, 1))
-        end
-    end
+    # if skip_uniform
+    #     if all_same(U⃗)
+    #         return @SVector zeros(size(stencil.S⃗, 1))
+    #     end
+    # end
 
     # Conserved to primitive variables
     # W⃗ = cons2prim.(Ref(EOS), ρ, ρu, ρv, ρE)

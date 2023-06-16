@@ -4,7 +4,8 @@ using LocalHydroStencil
 using LIKWID
 
 eos = IdealEOS(1.4)
-dx = 0.0005
+# dx = 0.0005
+dx = 0.001
 # dx = 4e-4
 x = collect(-0.2:dx:0.2)
 y = collect(-0.2:dx:0.2)
@@ -67,16 +68,16 @@ skip_uniform = false
 # Marker.init()
 integrate!(time_int, U⃗, RS, mesh, eos, dt, muscl, minmod, skip_uniform)
 
-# @benchmark begin
-#     integrate!($time_int, $U⃗, $RS, $mesh, $eos, $dt, $muscl, $minmod)
-# end
+@benchmark begin
+    integrate!($time_int, $U⃗, $RS, $mesh, $eos, $dt, $muscl, $minmod)
+end
 
 
 # @marker "integrate" begin
-    for iter in 1:100
-        println("Iter: ", iter)
-        integrate!(time_int, U⃗, RS, mesh, eos, dt, muscl, minmod, skip_uniform)
-    end
+    # for iter in 1:100
+        # println("Iter: ", iter)
+        # integrate!(time_int, U⃗, RS, mesh, eos, dt, muscl, minmod, skip_uniform)
+    # end
 # end
 
 # Marker.close()
