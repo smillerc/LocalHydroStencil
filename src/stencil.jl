@@ -14,6 +14,7 @@ struct Stencil9Point{T,AA,E}
     ΔS::SVector{4,T}
     Ω::T
     EOS::E
+    centroid::SVector{2,T}
 end
 
 struct Stencil9PointSplit{T,AA,AB,E}

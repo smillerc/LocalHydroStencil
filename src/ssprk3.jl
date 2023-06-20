@@ -125,16 +125,18 @@ function sync_halo!(U, nhalo)
     return nothing
 end
 
+
 @inbounds function integrate!(
-    SS::SSPRK3Integrator,
+    SS::SSPRK3IntegratorCPU,
     U⃗n::AbstractArray{T},
-    riemann_solver,
     mesh,
     EOS,
     dt::Number,
-    recon::F1,
-    limiter::F2, skip_uniform=true
-) where {T,F1,F2}
+    # BCs,
+    riemann_solver,
+    recon::F2,
+    limiter::F3, skip_uniform=true
+) where {T,F2,F3}
     nhalo = mesh.nhalo
     ilohi = axes(U⃗n, 2)
     jlohi = axes(U⃗n, 3)
@@ -143,6 +145,7 @@ end
     ihi = last(ilohi) - nhalo
     jhi = last(jlohi) - nhalo
 
+    looplimits = (ilo, ihi, jlo, jhi)
     U⃗1 = SS.U⃗1
     U⃗2 = SS.U⃗2
     U⃗3 = SS.U⃗3
@@ -150,30 +153,38 @@ end
     ΔS_face = mesh.facelen
     vol = mesh.volume
     norms = mesh.facenorms
+    centroid_pos = mesh.centroid
 
-    # @batch needs to work with isbits types -- somehow see if I can make mesh contain only isbits stuff
+    # @timeit "applyBC!" applyBC!(BCs, mesh, EOS, U⃗n)
+    # applyBC!(BCs, mesh, EOS, U⃗n)
+    # sync_halo!(Un, nhalo)
+
     # Stage 1
-    @batch per = thread for j in jlo:jhi
+    # @timeit "stage 1" begin
+    @batch for j in jlo:jhi
         for i in ilo:ihi
             U⁽ⁿ⁾ = SVector{4,T}(view(U⃗n, :, i, j))
             U_local = get_block(U⃗n, i, j)
             S⃗ = @SVector zeros(4)
             n̂ = SMatrix{2,4}(view(norms,:,:,i,j))
             ΔS = SVector{4,T}(view(ΔS_face,:,i,j))
-            # n̂ = norms[i, j]
-            # ΔS = ΔS_face[i, j]
             Ω = vol[i, j]
-            stencil = Stencil9Point(U_local, S⃗, n̂, ΔS, Ω, EOS)
-            ∂U⁽ⁿ⁾∂t = ∂U∂t(riemann_solver, stencil, recon, limiter)
-            U⁽¹⁾ = U⁽ⁿ⁾ + ∂U⁽ⁿ⁾∂t * dt
-            U⃗1[:, i, j] = U⁽¹⁾
+            x⃗_c = SVector{2,T}(view(centroid_pos,:,i,j))
+            stencil = Stencil9Point(U_local, S⃗, n̂, ΔS, Ω, EOS, x⃗_c)
+            ∂U⁽ⁿ⁾∂t = riemann_solver.∂U∂t(stencil, recon, limiter, skip_uniform)
+            U⃗1[:, i, j] = U⁽ⁿ⁾ + ∂U⁽ⁿ⁾∂t * dt
+            # U⁽¹⁾ = U⁽ⁿ⁾ + ∂U⁽ⁿ⁾∂t * dt
+            # U⃗1[:, i, j] = U⁽¹⁾
         end
     end
 
-    sync_halo!(U⃗1, nhalo)
+
+    # @timeit "applyBC!" applyBC!(BCs, mesh, EOS, U⃗1)
+    # applyBC!(BCs, mesh, EOS, U⃗1)
+    # sync_halo!(U⃗1, nhalo)
 
     # Stage 2
-    @batch per = thread for j in jlo:jhi
+    @batch for j in jlo:jhi
         for i in ilo:ihi
             U⁽¹⁾ = SVector{4,T}(view(U⃗1, :, i, j))
             U⁽ⁿ⁾ = SVector{4,T}(view(U⃗n, :, i, j))
@@ -181,20 +192,22 @@ end
             S⃗ = @SVector zeros(4)
             n̂ = SMatrix{2,4}(view(norms,:,:,i,j))
             ΔS = SVector{4,T}(view(ΔS_face,:,i,j))
-            # n̂ = norms[i, j]
-            # ΔS = ΔS_face[i, j]
             Ω = vol[i, j]
-            stencil = Stencil9Point(U_local, S⃗, n̂, ΔS, Ω, EOS)
-            ∂U⁽¹⁾∂t = ∂U∂t(riemann_solver, stencil, recon, limiter)
+            x⃗_c = SVector{2,T}(view(centroid_pos,:,i,j))
+            stencil = Stencil9Point(U_local, S⃗, n̂, ΔS, Ω, EOS, x⃗_c)
+            ∂U⁽¹⁾∂t = riemann_solver.∂U∂t(stencil, recon, limiter, skip_uniform)
             U⁽²⁾ = 0.75U⁽ⁿ⁾ + 0.25U⁽¹⁾ + ∂U⁽¹⁾∂t * 0.25dt
             U⃗2[:, i, j] = U⁽²⁾
         end
     end
 
-    sync_halo!(U⃗2, nhalo)
+
+    # @timeit "applyBC!" applyBC!(BCs, mesh, EOS, U⃗2)
+    # applyBC!(BCs, mesh, EOS, U⃗2)
+    # sync_halo!(U⃗2, nhalo)
 
     # Stage 3
-    @batch per = thread for j in jlo:jhi
+    @batch for j in jlo:jhi
         for i in ilo:ihi
             U⁽²⁾ = SVector{4,T}(view(U⃗2, :, i, j))
             U⁽ⁿ⁾ = SVector{4,T}(view(U⃗n, :, i, j))
@@ -202,19 +215,57 @@ end
             S⃗ = @SVector zeros(4)
             n̂ = SMatrix{2,4}(view(norms,:,:,i,j))
             ΔS = SVector{4,T}(view(ΔS_face,:,i,j))
-            # n̂ = norms[i, j]
-            # ΔS = ΔS_face[i, j]
             Ω = vol[i, j]
-            stencil = Stencil9Point(U_local, S⃗, n̂, ΔS, Ω, EOS)
-            ∂U⁽²⁾∂t = ∂U∂t(riemann_solver, stencil, recon, limiter)
+            x⃗_c = SVector{2,T}(view(centroid_pos,:,i,j))
+            stencil = Stencil9Point(U_local, S⃗, n̂, ΔS, Ω, EOS, x⃗_c)
+            ∂U⁽²⁾∂t = riemann_solver.∂U∂t(stencil, recon, limiter, skip_uniform)
             U⁽ⁿ⁺¹⁾ = (1 / 3) * U⁽ⁿ⁾ + (2 / 3) * U⁽²⁾ + ∂U⁽²⁾∂t * (2 / 3) * dt
             U⃗3[:, i, j] = U⁽ⁿ⁺¹⁾
         end
     end
 
-    sync_halo!(U⃗3, nhalo)
+    # sync_halo!(U⃗3, nhalo)
+    # resids = check_residuals(U⃗2,U⃗1,looplimits)
+    resids = @SVector zeros(4)
+    success = true
+    return success, resids
+end
 
-    return nothing
+function check_residuals(U1, Un, looplimits)
+    # TODO: make this work for diff sizes
+
+    ilo, ihi, jlo, jhi = looplimits
+    ϕ1_denoms = @MVector zeros(4)
+    resids = @MVector zeros(4)
+    numerators = @MVector zeros(4)
+    fill!(resids, -Inf)
+    
+    @batch for j in jlo:jhi
+        for i in ilo:ihi
+            for q in eachindex(ϕ1_denoms)
+                ϕ1_denoms[q] += U1[q,i,j]^2
+            end
+        end
+    end
+    ϕ1_denoms = sqrt.(ϕ1_denoms)
+
+
+    # if isinf.(ϕ1_denoms) || iszero(ϕ1_denoms)
+    #     resids = -Inf
+    # else
+
+        @batch for j in jlo:jhi
+            for i in ilo:ihi
+                for q in eachindex(ϕ1_denoms)
+                    numerators[q] += (Un[q,i,j] - U1[q,i,j])^2
+                end
+            end
+        end
+
+        resids = sqrt.(numerators) ./ ϕ1_denoms
+    # end
+
+    return SVector(resids)
 end
 
 end

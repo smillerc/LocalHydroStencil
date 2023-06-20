@@ -24,3 +24,20 @@ BenchmarkTools.Trial: 24 samples with 1 evaluation.
   209 ms           Histogram: frequency by time          221 ms <
 
  Memory estimate: 0 bytes, allocs estimate: 0.
+
+
+ # Using the current version as-is (commit fe30017)
+  - `check_uniform=false`
+  - `dx = 0.001`
+ ```
+ BenchmarkTools.Trial: 97 samples with 1 evaluation.
+ Range (min … max):  49.461 ms … 61.341 ms  ┊ GC (min … max): 0.00% … 0.00%
+ Time  (median):     51.281 ms              ┊ GC (median):    0.00%
+ Time  (mean ± σ):   51.814 ms ±  2.096 ms  ┊ GC (mean ± σ):  0.00% ± 0.00%
+
+     ▄█▄ ▅                                                     
+  ▅▅██████▃▆▆█████▆▆▁▃▁▅▁▅▅▃▁▃▁▁▅▃▅▃▁▁▅▁▁▃▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▃ ▁
+  49.5 ms         Histogram: frequency by time        59.9 ms <
+
+ Memory estimate: 0 bytes, allocs estimate: 0.
+ ```

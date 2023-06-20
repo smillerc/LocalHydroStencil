@@ -7,6 +7,7 @@ export IdealEOS, total_enthalpy, sound_speed, pressure, specific_total_energy, c
 include("reconstruction.jl")
 using .ReconstructionType
 export muscl, minmod, superbee
+export muscl_sarr_turbo_split2
 
 include("stencil.jl")
 using .StencilType
