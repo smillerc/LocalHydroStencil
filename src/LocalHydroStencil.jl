@@ -11,7 +11,7 @@ export muscl_sarr_turbo_split2
 
 include("stencil.jl")
 using .StencilType
-export Stencil9Point, get_block
+export Stencil9Point, Stencil9PointSplit, get_block
 
 include("mausmpw_riemann_solver.jl")
 using .RiemannSolverType
