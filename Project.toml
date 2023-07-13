@@ -7,6 +7,7 @@ version = "0.1.0"
 Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
 InteractiveUtils = "b77e0a4c-d291-57a0-90e8-8db25a27a240"
 KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
+LIKWID = "bf22376a-e803-4184-b2ed-56326e3bff83"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 LoopVectorization = "bdcacae8-1622-11e9-2a5c-532679323890"
 OffsetArrays = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
@@ -24,7 +25,9 @@ VectorizedStatistics = "3b853605-1c98-4422-8364-4bd93ee0529e"
 julia = "1.6"
 
 [extras]
+TestItemRunner = "f8b46487-2199-4994-9208-9a1283c18c0a"
+TestItems = "1c621080-faea-4a02-84b6-bbd5e436b8fe"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Test"]
+test = ["Test", "TestItems", "TestItemRunner"]

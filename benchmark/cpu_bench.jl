@@ -5,7 +5,7 @@ using LocalHydroStencil
 using TimerOutputs
 # using ProfileView
 eos = IdealEOS(1.4)
-# dx = 0.0005
+# dx = 0.0001
 dx = 0.001
 # dx = 4e-4
 x = collect(-0.2:dx:0.2)
@@ -74,17 +74,17 @@ println("Warmup")
 integrate!(time_int, U⃗, mesh, eos, dt, RS_orig, muscl, minmod, skip_uniform)
 integrate!(time_int, U⃗, mesh, eos, dt, RS_bcast, muscl_sarr_turbo_split2, minmod, skip_uniform)
 
-@profview begin
-    for _ in 1:20
-        integrate!(time_int, U⃗, mesh, eos, dt, RS_bcast, muscl_sarr_turbo_split2, minmod, skip_uniform)
-        # integrate!(time_int, U⃗, mesh, eos, dt, RS, muscl_sarr_turbo_split2, minmod, skip_uniform)
-    end
-end
+# @profview begin
+#     for _ in 1:150
+#         integrate!(time_int, U⃗, mesh, eos, dt, RS_bcast, muscl_sarr_turbo_split2, minmod, skip_uniform)
+#         # integrate!(time_int, U⃗, mesh, eos, dt, RS, muscl_sarr_turbo_split2, minmod, skip_uniform)
+#     end
+# end
 
-    println("Benchmarking with muscl orig")
-    @benchmark begin
-        integrate!($time_int, $U⃗, $mesh, $eos, $dt, $RS_orig, $muscl, $minmod, $skip_uniform)
-    end
+    # println("Benchmarking with muscl orig")
+    # @benchmark begin
+    #     integrate!($time_int, $U⃗, $mesh, $eos, $dt, $RS_orig, $muscl, $minmod, $skip_uniform)
+    # end
 
     println("Benchmarking with muscl_sarr_turbo_split2")
     @benchmark begin

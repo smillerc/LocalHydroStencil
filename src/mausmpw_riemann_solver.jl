@@ -299,7 +299,7 @@ function _∂U∂t_ninepoint_orig(stencil::Stencil9Point, recon::F1, limiter::F2
     # If the entire block is uniform, skip the riemann solve and just return
     # if skip_uniform
         # if all_same(U⃗)
-            # return @SVector zeros(size(stencil.S⃗, 1))
+        #     return @SVector zeros(size(stencil.S⃗, 1))
         # end
     # end
 
@@ -463,9 +463,9 @@ function _∂U∂t_ninepoint(stencil::Stencil9Point, recon::F1, limiter::F2, ski
 
     # If the entire block is uniform, skip the riemann solve and just return
     # if skip_uniform
-        # if all_same(U⃗)
-            # return @SVector zeros(size(stencil.S⃗, 1))
-        # end
+        if all_same(U⃗)
+            return @SVector zeros(size(stencil.S⃗, 1))
+        end
     # end
 
     # Conserved to primitive variables
@@ -484,9 +484,21 @@ function _∂U∂t_ninepoint(stencil::Stencil9Point, recon::F1, limiter::F2, ski
     W⃗ⱼ₊₁ = W⃗[3, 4]
     W⃗ⱼ₊₂ = W⃗[3, 5]
 
+    display(W⃗)
+
+    @show U⃗[3, 1]
+    @show U⃗[3, 2]
+    @show U⃗[3, 4]
+    @show U⃗[3, 5]
+
+    @show W⃗ᵢ₋₂ W⃗ᵢ₋₁ W⃗ᵢ₊₁ W⃗ᵢ₊₂
+    @show W⃗ⱼ₋₂ W⃗ⱼ₋₁ W⃗ⱼ₊₁ W⃗ⱼ₊₂
+
     # Reconstruct the left/right states
     W_L⁻ᵢ, W_R⁻ᵢ, W_L⁺ᵢ, W_R⁺ᵢ = recon(W⃗ᵢ₋₂, W⃗ᵢ₋₁, W⃗ᵢⱼ, W⃗ᵢ₊₁, W⃗ᵢ₊₂, limiter)
+    @show W_L⁻ᵢ, W_R⁻ᵢ, W_L⁺ᵢ, W_R⁺ᵢ
     W_L⁻ⱼ, W_R⁻ⱼ, W_L⁺ⱼ, W_R⁺ⱼ = recon(W⃗ⱼ₋₂, W⃗ⱼ₋₁, W⃗ᵢⱼ, W⃗ⱼ₊₁, W⃗ⱼ₊₂, limiter)
+    @show W_L⁻ⱼ, W_R⁻ⱼ, W_L⁺ⱼ, W_R⁺ⱼ 
     W_L⁻ᵢSB, W_R⁻ᵢSB, W_L⁺ᵢSB, W_R⁺ᵢSB = recon(W⃗ᵢ₋₂, W⃗ᵢ₋₁, W⃗ᵢⱼ, W⃗ᵢ₊₁, W⃗ᵢ₊₂, superbee)
     W_L⁻ⱼSB, W_R⁻ⱼSB, W_L⁺ⱼSB, W_R⁺ⱼSB = recon(W⃗ⱼ₋₂, W⃗ⱼ₋₁, W⃗ᵢⱼ, W⃗ⱼ₊₁, W⃗ⱼ₊₂, superbee)
 
@@ -499,14 +511,17 @@ function _∂U∂t_ninepoint(stencil::Stencil9Point, recon::F1, limiter::F2, ski
     uᴸᴿᵢ⁻ = (W_L⁻ᵢ[2], W_R⁻ᵢ[2])
     vᴸᴿᵢ⁻ = (W_L⁻ᵢ[3], W_R⁻ᵢ[3])
     pᴸᴿᵢ⁻ = (W_L⁻ᵢ[4], W_R⁻ᵢ[4])
+    
     ρᴸᴿᵢ⁺ = (W_L⁺ᵢ[1], W_R⁺ᵢ[1])
     uᴸᴿᵢ⁺ = (W_L⁺ᵢ[2], W_R⁺ᵢ[2])
     vᴸᴿᵢ⁺ = (W_L⁺ᵢ[3], W_R⁺ᵢ[3])
     pᴸᴿᵢ⁺ = (W_L⁺ᵢ[4], W_R⁺ᵢ[4])
+
     ρᴸᴿⱼ⁻ = (W_L⁻ⱼ[1], W_R⁻ⱼ[1])
     uᴸᴿⱼ⁻ = (W_L⁻ⱼ[2], W_R⁻ⱼ[2])
     vᴸᴿⱼ⁻ = (W_L⁻ⱼ[3], W_R⁻ⱼ[3])
     pᴸᴿⱼ⁻ = (W_L⁻ⱼ[4], W_R⁻ⱼ[4])
+    
     ρᴸᴿⱼ⁺ = (W_L⁺ⱼ[1], W_R⁺ⱼ[1])
     uᴸᴿⱼ⁺ = (W_L⁺ⱼ[2], W_R⁺ⱼ[2])
     vᴸᴿⱼ⁺ = (W_L⁺ⱼ[3], W_R⁺ⱼ[3])
@@ -565,6 +580,12 @@ function _∂U∂t_ninepoint(stencil::Stencil9Point, recon::F1, limiter::F2, ski
     ωⱼ = (1.0, 1.0)
     # ωⱼ = modified_discontinuity_sensor_η.(p0ⱼ, p1ⱼ, p2ⱼ, p3ⱼ, p4ⱼ, p5ⱼ)
 
+    @show ρᴸᴿᵢ⁻
+    @show uᴸᴿᵢ⁻
+    @show vᴸᴿᵢ⁻
+    @show pᴸᴿᵢ⁻
+    println()
+
     F⃗ᵢ_m_half = MAUSMPW⁺(
         n̂4,
         ρᴸᴿᵢ⁻,
@@ -580,6 +601,12 @@ function _∂U∂t_ninepoint(stencil::Stencil9Point, recon::F1, limiter::F2, ski
         ωᵢ[1],
         EOS,
     )
+
+    @show ρᴸᴿⱼ⁻
+    @show uᴸᴿⱼ⁻
+    @show vᴸᴿⱼ⁻
+    @show pᴸᴿⱼ⁻
+    println()
 
     F⃗ⱼ_m_half = MAUSMPW⁺(
         n̂1,
@@ -597,6 +624,12 @@ function _∂U∂t_ninepoint(stencil::Stencil9Point, recon::F1, limiter::F2, ski
         EOS,
     )
 
+    @show ρᴸᴿᵢ⁺
+    @show uᴸᴿᵢ⁺
+    @show vᴸᴿᵢ⁺
+    @show pᴸᴿᵢ⁺
+    println()
+
     F⃗ᵢ_p_half = MAUSMPW⁺(
         n̂2,
         ρᴸᴿᵢ⁺,
@@ -612,6 +645,12 @@ function _∂U∂t_ninepoint(stencil::Stencil9Point, recon::F1, limiter::F2, ski
         ωᵢ[2],
         EOS,
     )
+
+    @show ρᴸᴿⱼ⁺
+    @show uᴸᴿⱼ⁺
+    @show vᴸᴿⱼ⁺
+    @show pᴸᴿⱼ⁺
+    println()
 
     F⃗ⱼ_p_half = MAUSMPW⁺(
         n̂3,
@@ -629,6 +668,11 @@ function _∂U∂t_ninepoint(stencil::Stencil9Point, recon::F1, limiter::F2, ski
         EOS,
     )
 
+    @show F⃗ᵢ_m_half, n̂4
+    @show F⃗ⱼ_m_half, n̂1
+    @show F⃗ᵢ_p_half, n̂2
+    @show F⃗ⱼ_p_half, n̂3
+
     dUdt = (
         -(
             F⃗ᵢ_p_half * stencil.ΔS[2] - F⃗ᵢ_m_half * stencil.ΔS[4] +
@@ -641,6 +685,134 @@ function _∂U∂t_ninepoint(stencil::Stencil9Point, recon::F1, limiter::F2, ski
 end
 
 function _∂U∂t_ninepoint_bcast(stencil::Stencil9Point, recon::F1, limiter::F2, skip_uniform=true) where {F1,F2}
+    U⃗ = stencil.U⃗
+    EOS = stencil.EOS
+
+    # If the entire block is uniform, skip the riemann solve and just return
+    # if skip_uniform
+        # if all_same(U⃗)
+            # return @SVector zeros(size(stencil.S⃗, 1))
+        # end
+    # end
+
+    # Conserved to primitive variables
+    # W⃗ = cons2prim.(Ref(EOS), ρ, ρu, ρv, ρE)
+    W⃗ = cons2prim.(Ref(EOS), U⃗)
+
+    W⃗ᵢ₋₂ = W⃗[1, 3]
+    W⃗ᵢ₋₁ = W⃗[2, 3]
+    W⃗ᵢ₊₁ = W⃗[4, 3]
+    W⃗ᵢ₊₂ = W⃗[5, 3]
+
+    W⃗ᵢⱼ = W⃗[3, 3]
+
+    W⃗ⱼ₋₂ = W⃗[3, 1]
+    W⃗ⱼ₋₁ = W⃗[3, 2]
+    W⃗ⱼ₊₁ = W⃗[3, 4]
+    W⃗ⱼ₊₂ = W⃗[3, 5]
+
+    # Reconstruct the left/right states
+    W_L⁻ᵢ, W_R⁻ᵢ, W_L⁺ᵢ, W_R⁺ᵢ = recon(W⃗ᵢ₋₂, W⃗ᵢ₋₁, W⃗ᵢⱼ, W⃗ᵢ₊₁, W⃗ᵢ₊₂, limiter)
+    W_L⁻ⱼ, W_R⁻ⱼ, W_L⁺ⱼ, W_R⁺ⱼ = recon(W⃗ⱼ₋₂, W⃗ⱼ₋₁, W⃗ᵢⱼ, W⃗ⱼ₊₁, W⃗ⱼ₊₂, limiter)
+    W_L⁻ᵢSB, W_R⁻ᵢSB, W_L⁺ᵢSB, W_R⁺ᵢSB = recon(W⃗ᵢ₋₂, W⃗ᵢ₋₁, W⃗ᵢⱼ, W⃗ᵢ₊₁, W⃗ᵢ₊₂, superbee)
+    W_L⁻ⱼSB, W_R⁻ⱼSB, W_L⁺ⱼSB, W_R⁺ⱼSB = recon(W⃗ⱼ₋₂, W⃗ⱼ₋₁, W⃗ᵢⱼ, W⃗ⱼ₊₁, W⃗ⱼ₊₂, superbee)
+
+    # ρᴸᴿᵢ, uᴸᴿᵢ, vᴸᴿᵢ, pᴸᴿᵢ = recon.(W⃗ᵢ₋₂, W⃗ᵢ₋₁, W⃗ᵢⱼ, W⃗ᵢ₊₁, W⃗ᵢ₊₂, Ref(limiter)) # i-1/2, i+1/2
+    # ρᴸᴿⱼ, uᴸᴿⱼ, vᴸᴿⱼ, pᴸᴿⱼ = recon.(W⃗ⱼ₋₂, W⃗ⱼ₋₁, W⃗ᵢⱼ, W⃗ⱼ₊₁, W⃗ⱼ₊₂, Ref(limiter)) # j-1/2, j+1/2
+    # ρᴸᴿᵢSB, uᴸᴿᵢSB, vᴸᴿᵢSB, pᴸᴿᵢSB = recon.(W⃗ᵢ₋₂, W⃗ᵢ₋₁, W⃗ᵢⱼ, W⃗ᵢ₊₁, W⃗ᵢ₊₂, Ref(superbee)) # i-1/2, i+1/2
+    # ρᴸᴿⱼSB, uᴸᴿⱼSB, vᴸᴿⱼSB, pᴸᴿⱼSB = recon.(W⃗ⱼ₋₂, W⃗ⱼ₋₁, W⃗ᵢⱼ, W⃗ⱼ₊₁, W⃗ⱼ₊₂, Ref(superbee)) # j-1/2, j+1/2
+
+    ρᴸ = @SVector [W_L⁻ᵢ[1], W_L⁻ⱼ[1], W_L⁺ᵢ[1], W_L⁺ⱼ[1]]
+    ρᴿ = @SVector [W_R⁻ᵢ[1], W_R⁻ⱼ[1], W_R⁺ᵢ[1], W_R⁺ⱼ[1]]
+    uᴸ = @SVector [W_L⁻ᵢ[2], W_L⁻ⱼ[2], W_L⁺ᵢ[2], W_L⁺ⱼ[2]]
+    uᴿ = @SVector [W_R⁻ᵢ[2], W_R⁻ⱼ[2], W_R⁺ᵢ[2], W_R⁺ⱼ[2]]
+    vᴸ = @SVector [W_L⁻ᵢ[3], W_L⁻ⱼ[3], W_L⁺ᵢ[3], W_L⁺ⱼ[3]]
+    vᴿ = @SVector [W_R⁻ᵢ[3], W_R⁻ⱼ[3], W_R⁺ᵢ[3], W_R⁺ⱼ[3]]
+    pᴸ = @SVector [W_L⁻ᵢ[4], W_L⁻ⱼ[4], W_L⁺ᵢ[4], W_L⁺ⱼ[4]]
+    pᴿ = @SVector [W_R⁻ᵢ[4], W_R⁻ⱼ[4], W_R⁺ᵢ[4], W_R⁺ⱼ[4]]
+
+    ρᴸSB = @SVector [W_L⁻ᵢSB[1], W_L⁻ⱼSB[1], W_L⁺ᵢSB[1], W_L⁺ⱼSB[1]]
+    ρᴿSB = @SVector [W_R⁻ᵢSB[1], W_R⁻ⱼSB[1], W_R⁺ᵢSB[1], W_R⁺ⱼSB[1]]
+    uᴸSB = @SVector [W_L⁻ᵢSB[2], W_L⁻ⱼSB[2], W_L⁺ᵢSB[2], W_L⁺ⱼSB[2]]
+    uᴿSB = @SVector [W_R⁻ᵢSB[2], W_R⁻ⱼSB[2], W_R⁺ᵢSB[2], W_R⁺ⱼSB[2]]
+    vᴸSB = @SVector [W_L⁻ᵢSB[3], W_L⁻ⱼSB[3], W_L⁺ᵢSB[3], W_L⁺ⱼSB[3]]
+    vᴿSB = @SVector [W_R⁻ᵢSB[3], W_R⁻ⱼSB[3], W_R⁺ᵢSB[3], W_R⁺ⱼSB[3]]
+    pᴸSB = @SVector [W_L⁻ᵢSB[4], W_L⁻ⱼSB[4], W_L⁺ᵢSB[4], W_L⁺ⱼSB[4]]
+    pᴿSB = @SVector [W_R⁻ᵢSB[4], W_R⁻ⱼSB[4], W_R⁺ᵢSB[4], W_R⁺ⱼSB[4]]
+
+
+    W⃗ᵢc = (W⃗ᵢ₋₁, W⃗ᵢⱼ) # i average state
+    W⃗ᵢc1 = (W⃗ᵢⱼ, W⃗ᵢ₊₁) # i+1 average state
+
+    W⃗ⱼc = (W⃗ⱼ₋₁, W⃗ᵢⱼ) # j average state
+    W⃗ⱼc1 = (W⃗ᵢⱼ, W⃗ⱼ₊₁) # j+1 average state
+
+    n̂1 = -stencil.n̂[:, 1]
+    n̂2 = stencil.n̂[:, 2]
+    n̂3 = stencil.n̂[:, 3]
+    n̂4 = -stencil.n̂[:, 4]
+
+    i⁻ = 2
+    i⁺ = 3
+    j = 3
+    p0ᵢ = (W⃗[i⁻, j][4],     W⃗[i⁺, j][4])
+    p1ᵢ = (W⃗[i⁻+1, j][4],   W⃗[i⁺+1, j][4])
+    p2ᵢ = (W⃗[i⁻+1, j+1][4], W⃗[i⁺+1, j+1][4])
+    p3ᵢ = (W⃗[i⁻+1, j-1][4], W⃗[i⁺+1, j-1][4])
+    p4ᵢ = (W⃗[i⁻, j+1][4],   W⃗[i⁺, j+1][4])
+    p5ᵢ = (W⃗[i⁻, j-1][4],   W⃗[i⁺, j-1][4])
+    # ωᵢ = (1.0, 1.0)
+    ωᵢ = modified_discontinuity_sensor_ξ.(p0ᵢ, p1ᵢ, p2ᵢ, p3ᵢ, p4ᵢ, p5ᵢ)
+
+    i = 3
+    j⁻ = 2
+    j⁺ = 3
+    p0ⱼ = (W⃗[i, j⁻][4],     W⃗[i,   j⁺][4])
+    p1ⱼ = (W⃗[i+1, j⁻][4],   W⃗[i+1, j⁺][4])
+    p2ⱼ = (W⃗[i+1, j⁻+1][4], W⃗[i+1, j⁺+1][4])
+    p3ⱼ = (W⃗[i-1, j⁻+1][4], W⃗[i-1, j⁺+1][4])
+    p4ⱼ = (W⃗[i-1, j⁻][4],   W⃗[i-1, j⁺][4])
+    p5ⱼ = (W⃗[i, j⁻+1][4],   W⃗[i,   j⁺+1][4])
+    # ωⱼ = (1.0, 1.0)
+    ωⱼ = modified_discontinuity_sensor_η.(p0ⱼ, p1ⱼ, p2ⱼ, p3ⱼ, p4ⱼ, p5ⱼ)
+
+    nx = SVector{4,Float64}(n̂4[1], n̂1[1], n̂2[1], n̂3[1])
+    ny = SVector{4,Float64}(n̂4[2], n̂1[2], n̂2[2], n̂3[2])
+    ρflux, ρuflux, ρvflux, Eflux = MAUSMPW⁺_mod(nx, ny,
+        ρᴸ, ρᴿ, uᴸ, uᴿ, vᴸ, vᴿ, pᴸ, pᴿ,
+        ρᴸSB, ρᴿSB, uᴸSB, uᴿSB, vᴸSB, vᴿSB, pᴸSB, pᴿSB,
+        (W⃗ᵢc[1], W⃗ⱼc[1], W⃗ᵢc[2], W⃗ⱼc[2]),
+        (W⃗ᵢc1[1], W⃗ⱼc1[1], W⃗ᵢc1[2], W⃗ⱼc1[2]),
+        (ωᵢ[1], ωⱼ[1], ωᵢ[2], ωⱼ[2]),
+       EOS
+    )
+    # @code_warntype MAUSMPW⁺_mod(nx, ny,
+    #     ρᴸ, ρᴿ, uᴸ, uᴿ, vᴸ, vᴿ, pᴸ, pᴿ,
+    #     ρᴸSB, ρᴿSB, uᴸSB, uᴿSB, vᴸSB, vᴿSB, pᴸSB, pᴿSB,
+    #     (W⃗ᵢc[1], W⃗ⱼc[1], W⃗ᵢc[2], W⃗ⱼc[2]),
+    #     (W⃗ᵢc1[1], W⃗ⱼc1[1], W⃗ᵢc1[2], W⃗ⱼc1[2]),
+    #     (ωᵢ[1], ωⱼ[1], ωᵢ[2], ωⱼ[2]),
+    #    EOS
+    # )
+
+    # error("done")
+    F⃗ᵢ_m_half = @SVector [ρflux[1], ρuflux[1], ρvflux[1], Eflux[1]]
+    F⃗ⱼ_m_half = @SVector [ρflux[2], ρuflux[2], ρvflux[2], Eflux[2]]
+    F⃗ᵢ_p_half = @SVector [ρflux[3], ρuflux[3], ρvflux[3], Eflux[3]]
+    F⃗ⱼ_p_half = @SVector [ρflux[4], ρuflux[4], ρvflux[4], Eflux[4]]
+
+    dUdt = (
+        -(
+            F⃗ᵢ_p_half * stencil.ΔS[2] - F⃗ᵢ_m_half * stencil.ΔS[4] +
+            F⃗ⱼ_p_half * stencil.ΔS[3] - F⃗ⱼ_m_half * stencil.ΔS[1]
+        ) / stencil.Ω
+    )
+    +stencil.S⃗
+
+    return dUdt
+end
+
+function _∂U∂t_ninepoint_bcast(stencil::Stencil9PointSplit, recon::F1, limiter::F2, skip_uniform=true) where {F1,F2}
     U⃗ = stencil.U⃗
     EOS = stencil.EOS
 

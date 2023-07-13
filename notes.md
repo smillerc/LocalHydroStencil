@@ -41,3 +41,68 @@ BenchmarkTools.Trial: 24 samples with 1 evaluation.
 
  Memory estimate: 0 bytes, allocs estimate: 0.
  ```
+
+
+
+`nzones=640000`
+`nthreads=6`
+ ```
+ Benchmarking with muscl orig
+
+BenchmarkTools.Trial: 97 samples with 1 evaluation.
+ Range (min … max):  50.815 ms … 55.168 ms  ┊ GC (min … max): 0.00% … 0.00%
+ Time  (median):     51.672 ms              ┊ GC (median):    0.00%
+ Time  (mean ± σ):   51.981 ms ±  1.039 ms  ┊ GC (mean ± σ):  0.00% ± 0.00%
+
+      ▆█ ▁                                                     
+  ▄▆▃▁██▆█▃█▆█▇▆▆▆█▄▃▄▁▆▃▁▃▁▃▃▁▆▁▁▄▁▃▄▁▁▁▁▁▁▃▁▁▁▁▄▁▁▁▁▃▁▁▁▁▃▄ ▁
+  50.8 ms         Histogram: frequency by time        55.2 ms <
+
+ Memory estimate: 0 bytes, allocs estimate: 0.
+
+Benchmarking with muscl_sarr_turbo_split2
+
+BenchmarkTools.Trial: 118 samples with 1 evaluation.
+ Range (min … max):  40.980 ms … 52.887 ms  ┊ GC (min … max): 0.00% … 0.00%
+ Time  (median):     41.776 ms              ┊ GC (median):    0.00%
+ Time  (mean ± σ):   42.355 ms ±  1.560 ms  ┊ GC (mean ± σ):  0.00% ± 0.00%
+
+     ▁▃█ ▂▁▆                                                   
+  ▇▆▃███▆███▇██▄▄▆▁▄▆▄▄▄▁▆▄▁▁▁▁▁▃▁▁▁▃▁▃▃▁▃▃▁▁▃▃▁▁▃▄▄▄▃▃▃▁▁▃▁▃ ▃
+  41 ms           Histogram: frequency by time        45.7 ms <
+
+ Memory estimate: 0 bytes, allocs estimate: 0.
+ ```
+ `speedup=1.23x`
+
+
+`nzones=640000`
+`nthreads=12`
+ ```
+ Benchmarking with muscl orig
+
+BenchmarkTools.Trial: 171 samples with 1 evaluation.
+ Range (min … max):  27.394 ms … 39.236 ms  ┊ GC (min … max): 0.00% … 0.00%
+ Time  (median):     28.951 ms              ┊ GC (median):    0.00%
+ Time  (mean ± σ):   29.301 ms ±  1.884 ms  ┊ GC (mean ± σ):  0.00% ± 0.00%
+
+    ▁   ▁▃▄█▁▃▁                                                
+  ▇▅██▇████████▄▁▃▄▁▄▃▁▁▃▁▁▃▁▁▃▁▁▁▃▃▃▃▁▁▁▁▃▃▁▁▁▁▁▁▁▁▁▃▁▁▁▁▁▁▃ ▃
+  27.4 ms         Histogram: frequency by time        37.7 ms <
+
+ Memory estimate: 0 bytes, allocs estimate: 0.
+
+Benchmarking with muscl_sarr_turbo_split2
+
+BenchmarkTools.Trial: 211 samples with 1 evaluation.
+ Range (min … max):  21.965 ms … 30.001 ms  ┊ GC (min … max): 0.00% … 0.00%
+ Time  (median):     23.268 ms              ┊ GC (median):    0.00%
+ Time  (mean ± σ):   23.681 ms ±  1.367 ms  ┊ GC (mean ± σ):  0.00% ± 0.00%
+
+     ▁  ▂▁ ▃█▄▆   ▂                                            
+  ▆▇▇█▆█████████▇▆█▇▄▆▁▆▁▁▁▄▁▁▁▁▆▄▄▁▇▁▄▁▄▄▄▆▄▁▁▄▁▆▄▄▁▁▁▁▁▁▁▄▄ ▆
+  22 ms        Histogram: log(frequency) by time      29.1 ms <
+
+ Memory estimate: 0 bytes, allocs estimate: 0.
+ ```
+  `speedup=1.24x`

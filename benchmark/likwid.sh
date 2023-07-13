@@ -1,0 +1,2 @@
+JULIA_EXCLUSIVE=1 likwid-perfctr -c 0-31 -g MEM_DP -m julia --project=.. -t 32 cpu_bench_likwid.jl
+# JULIA_EXCLUSIVE=1 likwid-perfctr -c 0-31 -g FLOPS_DP -m julia --project=.. -t 32 cpu_bench_likwid.jl

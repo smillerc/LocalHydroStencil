@@ -33,7 +33,6 @@ struct Stencil9PointSplit{T,AA,AB,E}
 end
 
 @inline function get_block(U::AbstractArray{T,3}, i, j) where {T}
-    # ublk = @SArray [SVector{4,T}(view(U, :, i + io, j + jo)) for jo in -2:2, io in -2:2]
     ublk = @SArray [SVector{4,T}(view(U, :, i + io, j + jo)) for io in -2:2, jo in -2:2]
     return ublk
 end
