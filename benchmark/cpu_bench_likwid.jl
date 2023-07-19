@@ -76,12 +76,10 @@ println("Warmup")
 # integrate!(time_int, U⃗, mesh, eos, dt, RS_orig, muscl, minmod, skip_uniform)
 integrate!(time_int, U⃗, mesh, eos, dt, RS_bcast, muscl_sarr_turbo_split2, minmod, skip_uniform)
 
+println("starting")
 Marker.init()
-# @perfmon_marker "FLOPS_DP" begin
-    # integrate!(time_int, U⃗, mesh, eos, dt, RS_orig, muscl, minmod, skip_uniform)
-    for _ in 1:10
+    for cycle in 1:2
+        println("cycle: $cycle")
         integrate!(time_int, U⃗, mesh, eos, dt, RS_bcast, muscl_sarr_turbo_split2, minmod, skip_uniform)
     end
-# end
-
 Marker.close()

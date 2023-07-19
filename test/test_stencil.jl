@@ -42,9 +42,9 @@
     ∂U∂t = RS.∂U∂t(stencil, muscl_sarr_turbo_split2, minmod, false)
     
     @show ∂U∂t   
-    # @test iszero(∂U∂t[1])
-    # @test iszero(∂U∂t[2])
-    # @test ∂U∂t[3] > 0
-    # @test ∂U∂t[4] > 0
+    @test iszero(∂U∂t[1])
+    @test iszero(∂U∂t[2])
+    @test ∂U∂t[3] > 0
+    @test ∂U∂t[4] > 0
 
 end

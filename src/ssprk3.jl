@@ -156,16 +156,16 @@ end
     @batch per=thread for j in jlo:jhi
         for i in ilo:ihi
             @marker "dUdt" begin
-            U⁽ⁿ⁾ = SVector{4,T}(view(U⃗n, :, i, j))
-            U_local = get_block(U⃗n, i, j)
-            S⃗ = @SVector zeros(4)
-            n̂ = SMatrix{2,4}(view(norms,:,:,i,j))
-            ΔS = SVector{4,T}(view(ΔS_face,:,i,j))
-            Ω = vol[i, j]
-            x⃗_c = SVector{2,T}(view(centroid_pos,:,i,j))
-            stencil = Stencil9Point(U_local, S⃗, n̂, ΔS, Ω, EOS, x⃗_c)
-            ∂U⁽ⁿ⁾∂t = riemann_solver.∂U∂t(stencil, recon, limiter, skip_uniform)
-            U⃗1[:, i, j] = U⁽ⁿ⁾ + ∂U⁽ⁿ⁾∂t * dt
+                U⁽ⁿ⁾ = SVector{4,T}(view(U⃗n, :, i, j))
+                U_local = get_block(U⃗n, i, j)
+                S⃗ = @SVector zeros(4)
+                n̂ = SMatrix{2,4}(view(norms,:,:,i,j))
+                ΔS = SVector{4,T}(view(ΔS_face,:,i,j))
+                Ω = vol[i, j]
+                x⃗_c = SVector{2,T}(view(centroid_pos,:,i,j))
+                stencil = Stencil9Point(U_local, S⃗, n̂, ΔS, Ω, EOS, x⃗_c)
+                ∂U⁽ⁿ⁾∂t = riemann_solver.∂U∂t(stencil, recon, limiter, skip_uniform)
+                U⃗1[:, i, j] = U⁽ⁿ⁾ + ∂U⁽ⁿ⁾∂t * dt
             end
         end
     end
@@ -179,18 +179,18 @@ end
     @batch per=thread for j in jlo:jhi
         for i in ilo:ihi
             @marker "dUdt" begin
-            U⁽¹⁾ = SVector{4,T}(view(U⃗1, :, i, j))
-            U⁽ⁿ⁾ = SVector{4,T}(view(U⃗n, :, i, j))
-            U_local = get_block(U⃗1, i, j)
-            S⃗ = @SVector zeros(4)
-            n̂ = SMatrix{2,4}(view(norms,:,:,i,j))
-            ΔS = SVector{4,T}(view(ΔS_face,:,i,j))
-            Ω = vol[i, j]
-            x⃗_c = SVector{2,T}(view(centroid_pos,:,i,j))
-            stencil = Stencil9Point(U_local, S⃗, n̂, ΔS, Ω, EOS, x⃗_c)
-            ∂U⁽¹⁾∂t = riemann_solver.∂U∂t(stencil, recon, limiter, skip_uniform)
-            U⁽²⁾ = 0.75U⁽ⁿ⁾ + 0.25U⁽¹⁾ + ∂U⁽¹⁾∂t * 0.25dt
-            U⃗2[:, i, j] = U⁽²⁾
+                U⁽¹⁾ = SVector{4,T}(view(U⃗1, :, i, j))
+                U⁽ⁿ⁾ = SVector{4,T}(view(U⃗n, :, i, j))
+                U_local = get_block(U⃗1, i, j)
+                S⃗ = @SVector zeros(4)
+                n̂ = SMatrix{2,4}(view(norms,:,:,i,j))
+                ΔS = SVector{4,T}(view(ΔS_face,:,i,j))
+                Ω = vol[i, j]
+                x⃗_c = SVector{2,T}(view(centroid_pos,:,i,j))
+                stencil = Stencil9Point(U_local, S⃗, n̂, ΔS, Ω, EOS, x⃗_c)
+                ∂U⁽¹⁾∂t = riemann_solver.∂U∂t(stencil, recon, limiter, skip_uniform)
+                U⁽²⁾ = 0.75U⁽ⁿ⁾ + 0.25U⁽¹⁾ + ∂U⁽¹⁾∂t * 0.25dt
+                U⃗2[:, i, j] = U⁽²⁾
             end
         end
     end
@@ -204,18 +204,18 @@ end
     @batch per=thread for j in jlo:jhi
         for i in ilo:ihi
             @marker "dUdt" begin
-            U⁽²⁾ = SVector{4,T}(view(U⃗2, :, i, j))
-            U⁽ⁿ⁾ = SVector{4,T}(view(U⃗n, :, i, j))
-            U_local = get_block(U⃗2, i, j)
-            S⃗ = @SVector zeros(4)
-            n̂ = SMatrix{2,4}(view(norms,:,:,i,j))
-            ΔS = SVector{4,T}(view(ΔS_face,:,i,j))
-            Ω = vol[i, j]
-            x⃗_c = SVector{2,T}(view(centroid_pos,:,i,j))
-            stencil = Stencil9Point(U_local, S⃗, n̂, ΔS, Ω, EOS, x⃗_c)
-            ∂U⁽²⁾∂t = riemann_solver.∂U∂t(stencil, recon, limiter, skip_uniform)
-            U⁽ⁿ⁺¹⁾ = (1 / 3) * U⁽ⁿ⁾ + (2 / 3) * U⁽²⁾ + ∂U⁽²⁾∂t * (2 / 3) * dt
-            U⃗3[:, i, j] = U⁽ⁿ⁺¹⁾
+                U⁽²⁾ = SVector{4,T}(view(U⃗2, :, i, j))
+                U⁽ⁿ⁾ = SVector{4,T}(view(U⃗n, :, i, j))
+                U_local = get_block(U⃗2, i, j)
+                S⃗ = @SVector zeros(4)
+                n̂ = SMatrix{2,4}(view(norms,:,:,i,j))
+                ΔS = SVector{4,T}(view(ΔS_face,:,i,j))
+                Ω = vol[i, j]
+                x⃗_c = SVector{2,T}(view(centroid_pos,:,i,j))
+                stencil = Stencil9Point(U_local, S⃗, n̂, ΔS, Ω, EOS, x⃗_c)
+                ∂U⁽²⁾∂t = riemann_solver.∂U∂t(stencil, recon, limiter, skip_uniform)
+                U⁽ⁿ⁺¹⁾ = (1 / 3) * U⁽ⁿ⁾ + (2 / 3) * U⁽²⁾ + ∂U⁽²⁾∂t * (2 / 3) * dt
+                U⃗3[:, i, j] = U⁽ⁿ⁺¹⁾
             end
         end
     end
