@@ -57,7 +57,7 @@ end
 # RS_orig = M_AUSMPWPlus2D(LocalHydroStencil.RiemannSolverType._∂U∂t_ninepoint_orig)
 # RS = M_AUSMPWPlus2D(LocalHydroStencil.RiemannSolverType._∂U∂t_ninepoint)
 RS_bcast = M_AUSMPWPlus2D(LocalHydroStencil.RiemannSolverType._∂U∂t_ninepoint_bcast)
-time_int = SSPRK3IntegratorCPU(U⃗)
+time_int = SSPRK3(U⃗)
 
 println("nthreads: ", nthreads())
 

@@ -20,8 +20,8 @@ struct M_AUSMPWPlus2D{F} <: AbstractRiemannSolver
   ∂U∂t::F
 end
 
-M_AUSMPWPlus2D() = M_AUSMPWPlus2D(_∂U∂t_ninepoint)
-M_AUSMPWPlus2D(::Stencil9Point) = M_AUSMPWPlus2D(_∂U∂t_ninepoint)
+M_AUSMPWPlus2D() = M_AUSMPWPlus2D(_∂U∂t_ninepoint_bcast)
+M_AUSMPWPlus2D(::Stencil9Point) = M_AUSMPWPlus2D(_∂U∂t_ninepoint_bcast)
 
 """Check if all values in the block are the same. This lets us skip the Riemann solve"""
 function all_same(blk)
@@ -125,9 +125,9 @@ function MAUSMPW⁺_mod(
   PLRpm = modified_pressure_split.(ML, MR, Mstarᵢ, Mstarᵢ₊₁, ρᵢ, Uᵢ, pᵢ, ρᵢ₊₁, Uᵢ₊₁, pᵢ₊₁)
   PL⁺ = @SVector [PLRpm[i][1] for i in 1:4]
   PR⁻ = @SVector [PLRpm[i][2] for i in 1:4]
-  # @show ML MR Mstarᵢ Mstarᵢ₊₁ ρᵢ Uᵢ pᵢ ρᵢ₊₁ Uᵢ₊₁ pᵢ₊₁
-  # @show pL PL⁺ pR PR⁻
-  # @show modified_pressure_split.(
+  # #@show ML MR Mstarᵢ Mstarᵢ₊₁ ρᵢ Uᵢ pᵢ ρᵢ₊₁ Uᵢ₊₁ pᵢ₊₁
+  # #@show pL PL⁺ pR PR⁻
+  # #@show modified_pressure_split.(
   #     ML, MR, Mstarᵢ, Mstarᵢ₊₁, ρᵢ, Uᵢ, pᵢ, ρᵢ₊₁, Uᵢ₊₁, pᵢ₊₁
   # )
   pₛ = @. pL * PL⁺ + pR * PR⁻
@@ -492,19 +492,19 @@ function _∂U∂t_ninepoint(
 
   display(W⃗)
 
-  @show U⃗[3, 1]
-  @show U⃗[3, 2]
-  @show U⃗[3, 4]
-  @show U⃗[3, 5]
+  #@show U⃗[3, 1]
+  #@show U⃗[3, 2]
+  #@show U⃗[3, 4]
+  #@show U⃗[3, 5]
 
-  @show W⃗ᵢ₋₂ W⃗ᵢ₋₁ W⃗ᵢ₊₁ W⃗ᵢ₊₂
-  @show W⃗ⱼ₋₂ W⃗ⱼ₋₁ W⃗ⱼ₊₁ W⃗ⱼ₊₂
+  #@show W⃗ᵢ₋₂ W⃗ᵢ₋₁ W⃗ᵢ₊₁ W⃗ᵢ₊₂
+  #@show W⃗ⱼ₋₂ W⃗ⱼ₋₁ W⃗ⱼ₊₁ W⃗ⱼ₊₂
 
   # Reconstruct the left/right states
   W_L⁻ᵢ, W_R⁻ᵢ, W_L⁺ᵢ, W_R⁺ᵢ = recon(W⃗ᵢ₋₂, W⃗ᵢ₋₁, W⃗ᵢⱼ, W⃗ᵢ₊₁, W⃗ᵢ₊₂, limiter)
-  @show W_L⁻ᵢ, W_R⁻ᵢ, W_L⁺ᵢ, W_R⁺ᵢ
+  #@show W_L⁻ᵢ, W_R⁻ᵢ, W_L⁺ᵢ, W_R⁺ᵢ
   W_L⁻ⱼ, W_R⁻ⱼ, W_L⁺ⱼ, W_R⁺ⱼ = recon(W⃗ⱼ₋₂, W⃗ⱼ₋₁, W⃗ᵢⱼ, W⃗ⱼ₊₁, W⃗ⱼ₊₂, limiter)
-  @show W_L⁻ⱼ, W_R⁻ⱼ, W_L⁺ⱼ, W_R⁺ⱼ
+  #@show W_L⁻ⱼ, W_R⁻ⱼ, W_L⁺ⱼ, W_R⁺ⱼ
   W_L⁻ᵢSB, W_R⁻ᵢSB, W_L⁺ᵢSB, W_R⁺ᵢSB = recon(W⃗ᵢ₋₂, W⃗ᵢ₋₁, W⃗ᵢⱼ, W⃗ᵢ₊₁, W⃗ᵢ₊₂, superbee)
   W_L⁻ⱼSB, W_R⁻ⱼSB, W_L⁺ⱼSB, W_R⁺ⱼSB = recon(W⃗ⱼ₋₂, W⃗ⱼ₋₁, W⃗ᵢⱼ, W⃗ⱼ₊₁, W⃗ⱼ₊₂, superbee)
 
@@ -585,10 +585,10 @@ function _∂U∂t_ninepoint(
   ωⱼ = (1.0, 1.0)
   # ωⱼ = modified_discontinuity_sensor_η.(p0ⱼ, p1ⱼ, p2ⱼ, p3ⱼ, p4ⱼ, p5ⱼ)
 
-  @show ρᴸᴿᵢ⁻
-  @show uᴸᴿᵢ⁻
-  @show vᴸᴿᵢ⁻
-  @show pᴸᴿᵢ⁻
+  #@show ρᴸᴿᵢ⁻
+  #@show uᴸᴿᵢ⁻
+  #@show vᴸᴿᵢ⁻
+  #@show pᴸᴿᵢ⁻
   println()
 
   F⃗ᵢ_m_half = MAUSMPW⁺(
@@ -607,10 +607,10 @@ function _∂U∂t_ninepoint(
     EOS,
   )
 
-  @show ρᴸᴿⱼ⁻
-  @show uᴸᴿⱼ⁻
-  @show vᴸᴿⱼ⁻
-  @show pᴸᴿⱼ⁻
+  #@show ρᴸᴿⱼ⁻
+  #@show uᴸᴿⱼ⁻
+  #@show vᴸᴿⱼ⁻
+  #@show pᴸᴿⱼ⁻
   println()
 
   F⃗ⱼ_m_half = MAUSMPW⁺(
@@ -629,10 +629,10 @@ function _∂U∂t_ninepoint(
     EOS,
   )
 
-  @show ρᴸᴿᵢ⁺
-  @show uᴸᴿᵢ⁺
-  @show vᴸᴿᵢ⁺
-  @show pᴸᴿᵢ⁺
+  #@show ρᴸᴿᵢ⁺
+  #@show uᴸᴿᵢ⁺
+  #@show vᴸᴿᵢ⁺
+  #@show pᴸᴿᵢ⁺
   println()
 
   F⃗ᵢ_p_half = MAUSMPW⁺(
@@ -651,10 +651,10 @@ function _∂U∂t_ninepoint(
     EOS,
   )
 
-  @show ρᴸᴿⱼ⁺
-  @show uᴸᴿⱼ⁺
-  @show vᴸᴿⱼ⁺
-  @show pᴸᴿⱼ⁺
+  #@show ρᴸᴿⱼ⁺
+  #@show uᴸᴿⱼ⁺
+  #@show vᴸᴿⱼ⁺
+  #@show pᴸᴿⱼ⁺
   println()
 
   F⃗ⱼ_p_half = MAUSMPW⁺(
@@ -673,10 +673,10 @@ function _∂U∂t_ninepoint(
     EOS,
   )
 
-  @show F⃗ᵢ_m_half, n̂4
-  @show F⃗ⱼ_m_half, n̂1
-  @show F⃗ᵢ_p_half, n̂2
-  @show F⃗ⱼ_p_half, n̂3
+  #@show F⃗ᵢ_m_half, n̂4
+  #@show F⃗ⱼ_m_half, n̂1
+  #@show F⃗ᵢ_p_half, n̂2
+  #@show F⃗ⱼ_p_half, n̂3
 
   dUdt = (
     -(

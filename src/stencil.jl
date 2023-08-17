@@ -47,4 +47,54 @@ end
   return ublk
 end
 
+
+# function getvec(A::AbstractArray{T,3}, i, j) where {T}
+#   return SVector{4,T}(view(A, 1:4, i, j))
+# end
+
+# function get_nhat(mesh::CartesianMesh{T}, i, j) where {T}
+#   return SMatrix{2,4,T}(view(mesh.facenorms, 1:2, 1:4, i, j))
+# end
+
+# function get_ΔS(mesh::CartesianMesh{T}, i, j) where {T}
+#   return SVector{4,T}(view(mesh.facelen, 1:4, i, j))
+# end
+
+# @inbounds function get_gpublock(A::AbstractArray{T,3}, i, j, nh) where {T}
+#   S = Tuple{4,5,5}
+#   block = MArray{S,T}(undef)
+#   aview = view(A, :, (i - nh):(i + nh), (j - nh):(j + nh))
+#   for i in eachindex(block)
+#     @inbounds block[i] = aview[i]
+#   end
+#   return SArray(block)
+# end
+
+# function _2halo2dstencil(U⃗::AbstractArray{T,3}, Idx, mesh, EOS::E, nh) where {T,E}
+#   i, j = Idx
+#   U_local = getblock(U⃗, i, j, nh)
+#   S⃗ = @SVector zeros(4)
+#   n̂ = get_nhat(mesh, i, j)
+#   ΔS = get_ΔS(mesh, i, j)
+#   Ω = mesh.volume[i, j]
+#   BT = SArray{Tuple{4,5,5},T,3,100}
+
+#   return Stencil9Point{T,BT,E}(U_local, S⃗, n̂, ΔS, Ω, EOS)
+# end
+
+# function gpu_2halo2dstencil(U⃗::AbstractArray{T,N}, Idx) where {T,N}
+#   i, j = Idx
+
+#   U_local = getgpublock(U⃗, i, j, 2)
+
+#   S⃗ = @SVector zeros(4)
+#   n̂ = @SMatrix [0.0; -1.0;; 1.0; 0.0;; 0.0; 1.0;; -1.0; 0.0]
+#   ΔS = @SVector ones(4)
+#   Ω = 1.0
+#   γ = 5 / 3
+#   return Stencil9Point(U_local, S⃗, n̂, ΔS, Ω, γ)
+# end
+
+
+
 end # module

@@ -17,9 +17,9 @@ include("riemann_solver.jl")
 using .RiemannSolverType
 export M_AUSMPWPlus2D, MAUSMPW⁺, ∂U∂t
 
-include("integrate.jl")
-using .SSPRKType
-export SSPRK3IntegratorCPU, integrate!
+include("integration/integrate.jl")
+using .Integration
+export SSPRK3, integrate!
 
 include("mesh.jl")
 using .MeshType

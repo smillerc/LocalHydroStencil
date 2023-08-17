@@ -1,27 +1,5 @@
-using KernelAbstractions
+
 using LocalHydroStencil
-
-const BACKEND = :METAL
-
-if BACKEND == :CUDA
-  using CUDA
-  using CUDA.CUDAKernels
-  const ArrayT = CuArray
-  const Device = CUDADevice
-  const backend = CUDABackend()
-  CUDA.allowscalar(false)
-elseif BACKEND == :METAL
-  using Metal
-  using Metal.MetalKernels
-  const ArrayT = MtlArray
-  const Device = MTLDevice
-  const backend = MetalBackend()
-else
-  BACKEND == :CPU
-  const ArrayT = Array
-  const Device = CPU
-  const backend = CPU()
-end
 
 function initialize(mesh, eos)
   ρL, ρR = 1.0, 0.125
@@ -66,24 +44,19 @@ function main()
 
   U = initialize(mesh, eos)
 
-  if BACKEND == :METAL
-    U_device = adapt(ArrayT, U .|> Float32)
-  else
-    U_device = adapt(ArrayT, U)
-  end
-
-  copy!(U_device, U)
+  # ρ = @view U[1, :, :]
+  # ρu = @view U[2, :, :]
+  # ρv = @view U[3, :, :]
+  # ρE = @view U[4, :, :]
 
   riemann_solver = M_AUSMPWPlus2D()
-  time_int = SSPRK3(U_device)
+  time_int = SSPRK3(U)
 
   dt = 1e-5
 
   skip_uniform = false
-  println("Running integrate on $(backend)")
   integrate!(time_int, U, mesh, eos, dt, riemann_solver, muscl, minmod, skip_uniform)
 
-  println("Updating solution")
   copy!(U, time_int.U⃗3)
   return nothing
 end

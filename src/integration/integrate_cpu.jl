@@ -42,9 +42,9 @@ function sync_halo!(U, nhalo)
   return nothing
 end
 
-@inbounds function integrate!(
-  SS::SSPRK3IntegratorCPU,
-  U⃗n::AbstractArray{T},
+@inbounds function integrate_cpu!(
+  SS::SSPRK3,
+  U⃗n::Array{T,N},
   mesh,
   EOS,
   dt::Number,
@@ -53,7 +53,7 @@ end
   recon::F2,
   limiter::F3,
   skip_uniform=true,
-) where {T,F2,F3}
+) where {T,N,F2,F3}
   nhalo = mesh.nhalo
   ilohi = axes(U⃗n, 2)
   jlohi = axes(U⃗n, 3)
@@ -72,12 +72,9 @@ end
   norms = mesh.facenorms
   centroid_pos = mesh.centroid
 
-  # @timeit "applyBC!" applyBC!(BCs, mesh, EOS, U⃗n)
-  # applyBC!(BCs, mesh, EOS, U⃗n)
   # sync_halo!(Un, nhalo)
 
   # Stage 1
-  # @timeit "stage 1" begin
   @batch per = core for j in jlo:jhi
     for i in ilo:ihi
       U⁽ⁿ⁾ = SVector{4,T}(view(U⃗n, :, i, j))
@@ -93,8 +90,6 @@ end
     end
   end
 
-  # @timeit "applyBC!" applyBC!(BCs, mesh, EOS, U⃗1)
-  # applyBC!(BCs, mesh, EOS, U⃗1)
   # sync_halo!(U⃗1, nhalo)
 
   # Stage 2
@@ -115,8 +110,6 @@ end
     end
   end
 
-  # @timeit "applyBC!" applyBC!(BCs, mesh, EOS, U⃗2)
-  # applyBC!(BCs, mesh, EOS, U⃗2)
   # sync_halo!(U⃗2, nhalo)
 
   # Stage 3

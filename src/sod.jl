@@ -54,8 +54,8 @@ end
 ρE = @view U⃗[4, :, :]
 
 RS = M_AUSMPWPlus2D()
-time_int = SSPRK3IntegratorCPU(U⃗)
-# time_int2 = SSPRK3IntegratorCPUSplit(U⃗)
+time_int = SSPRK3(U⃗)
+# time_int2 = SSPRK3Split(U⃗)
 
 CFL = 0.8
 dt = CFL * next_Δt(U⃗, mesh, eos)
