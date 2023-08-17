@@ -41,12 +41,12 @@ dt = 1e-5
 U⃗ = zeros(4, M, N);
 
 for j in axes(mesh.volume, 2)
-    for i in axes(mesh.volume, 1)
-        U⃗[1, i, j] = ρ0[i, j]
-        U⃗[2, i, j] = ρ0[i, j] * u0[i, j]
-        U⃗[3, i, j] = ρ0[i, j] * v0[i, j]
-        U⃗[4, i, j] = ρ0[i, j] * E0[i, j]
-    end
+  for i in axes(mesh.volume, 1)
+    U⃗[1, i, j] = ρ0[i, j]
+    U⃗[2, i, j] = ρ0[i, j] * u0[i, j]
+    U⃗[3, i, j] = ρ0[i, j] * v0[i, j]
+    U⃗[4, i, j] = ρ0[i, j] * E0[i, j]
+  end
 end
 
 ρ = @view U⃗[1, :, :]
@@ -63,8 +63,8 @@ println("nthreads: ", nthreads())
 
 # Julia threads must be pinned! Printing the thread affinity.
 @threads :static for tid in 1:nthreads()
-    core = LIKWID.get_processor_id()
-    println("Thread $tid, Core $core")
+  core = LIKWID.get_processor_id()
+  println("Thread $tid, Core $core")
 end
 
 println("N zones: ", length(U⃗))
@@ -74,12 +74,16 @@ println("Warmup")
 
 # integrate!(time_int, U⃗, mesh, eos, dt, RS, muscl_sarr_turbo_split2, minmod, skip_uniform)
 # integrate!(time_int, U⃗, mesh, eos, dt, RS_orig, muscl, minmod, skip_uniform)
-integrate!(time_int, U⃗, mesh, eos, dt, RS_bcast, muscl_sarr_turbo_split2, minmod, skip_uniform)
+integrate!(
+  time_int, U⃗, mesh, eos, dt, RS_bcast, muscl_sarr_turbo_split2, minmod, skip_uniform
+)
 
 println("starting")
 Marker.init()
-    for cycle in 1:2
-        println("cycle: $cycle")
-        integrate!(time_int, U⃗, mesh, eos, dt, RS_bcast, muscl_sarr_turbo_split2, minmod, skip_uniform)
-    end
+for cycle in 1:2
+  println("cycle: $cycle")
+  integrate!(
+    time_int, U⃗, mesh, eos, dt, RS_bcast, muscl_sarr_turbo_split2, minmod, skip_uniform
+  )
+end
 Marker.close()

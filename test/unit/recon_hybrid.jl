@@ -65,7 +65,6 @@ using StaticArrays, BenchmarkTools, Polyester, .Threads
 #     return @SVector [(ϕ_L⁻, ϕ_R⁻), (ϕ_L⁺, ϕ_R⁺)]
 # end
 
-
 # ni = 10
 # nj = 10
 
@@ -76,7 +75,6 @@ using StaticArrays, BenchmarkTools, Polyester, .Threads
 # Wpacked = rand(4, ni, nj);
 # W_edge_i_packed = rand(2, 4, ni, nj);
 # W_edge_j_packed = rand(2, 4, ni, nj);
-
 
 # Whybrid = [
 #     @SVector rand(4) for j in 1:nj, i in 1:ni
@@ -89,7 +87,6 @@ using StaticArrays, BenchmarkTools, Polyester, .Threads
 # Wedge_j = [
 #     @SVector [@SVector [0.0,0.0] for _ in 1:4] for j in 1:nj, i in 1:ni
 # ]
-
 
 # function recon_hybrid(W, W_edge_i, W_edge_j, limiter::F, looplimits) where {F}
 #     ilo, ihi, jlo, jhi = looplimits
@@ -177,108 +174,168 @@ using StaticArrays, BenchmarkTools, Polyester, .Threads
 # @benchmark recon_packed_nosave($Wpacked, $W_edge_i_packed, $W_edge_j_packed, $minmod, $looplims)
 # @benchmark recon_packed_skip($Wpacked, $W_edge_i_packed, $W_edge_j_packed, $minmod, $looplims)
 
-
 @inline function pressure_split_minus_nobranch(M, α=0.0)
-    P⁻_a = 0.5(1 - sign(M))
-    P⁻_b = 0.25(M - 1)^2 * (2 + M) - α * M * (M^2 - 1)^2
+  P⁻_a = 0.5(1 - sign(M))
+  P⁻_b = 0.25(M - 1)^2 * (2 + M) - α * M * (M^2 - 1)^2
 
-    supersonic = abs(M) > 1
-    P⁻ = supersonic * P⁻_a + !supersonic * P⁻_b
-    return P⁻
+  supersonic = abs(M) > 1
+  P⁻ = supersonic * P⁻_a + !supersonic * P⁻_b
+  return P⁻
 end
 
 @inline function pressure_split_minus(M, α=0.0)
-    if abs(M) > 1
-        P⁻ = 0.5(1 - sign(M))
-    else #  |M| <= 1
-        P⁻ = 0.25(M - 1)^2 * (2 + M) - α * M * (M^2 - 1)^2
-    end
-    
-    return P⁻
+  if abs(M) > 1
+    P⁻ = 0.5(1 - sign(M))
+  else #  |M| <= 1
+    P⁻ = 0.25(M - 1)^2 * (2 + M) - α * M * (M^2 - 1)^2
+  end
+
+  return P⁻
 end
 
-M = .2
+M = 0.2
 Mall = @SVector rand(4)
 @benchmark pressure_split_minus_nobranch($M)
 @benchmark pressure_split_minus($M)
 
-pressure_split_minus_nobranch(M) 
+pressure_split_minus_nobranch(M)
 pressure_split_minus(M)
 
-pressure_split_minus_nobranch.(Mall) 
+pressure_split_minus_nobranch.(Mall)
 pressure_split_minus.(Mall)
 
 @benchmark pressure_split_minus_nobranch.($Mall)
 @benchmark pressure_split_minus.($Mall)
 
-
 args10 = abs.(rand(10))
 
-@inline function modified_pressure_split_nobranch(Mʟ, Mʀ, Mstarᵢ, Mstarᵢ₊₁, ρᵢ, uᵢ, pᵢ, ρᵢ₊₁, uᵢ₊₁, pᵢ₊₁)
-    Mach_criteria = Mstarᵢ > 1 && Mstarᵢ₊₁ < 1 && 0 < Mstarᵢ * Mstarᵢ₊₁ < 1
-    P⁻ᵢ₊₁_a = max(0, min(0.5, 1 - ((ρᵢ * uᵢ * (uᵢ - uᵢ₊₁) + pᵢ) / pᵢ₊₁)))
-    P⁻ᵢ₊₁_b = pressure_split_minus(Mʀ)
-    
-    P⁻ᵢ₊₁ = Mach_criteria * P⁻ᵢ₊₁_a + !Mach_criteria * P⁻ᵢ₊₁_b
-    return P⁻ᵢ₊₁
+@inline function modified_pressure_split_nobranch(
+  Mʟ, Mʀ, Mstarᵢ, Mstarᵢ₊₁, ρᵢ, uᵢ, pᵢ, ρᵢ₊₁, uᵢ₊₁, pᵢ₊₁
+)
+  Mach_criteria = Mstarᵢ > 1 && Mstarᵢ₊₁ < 1 && 0 < Mstarᵢ * Mstarᵢ₊₁ < 1
+  P⁻ᵢ₊₁_a = max(0, min(0.5, 1 - ((ρᵢ * uᵢ * (uᵢ - uᵢ₊₁) + pᵢ) / pᵢ₊₁)))
+  P⁻ᵢ₊₁_b = pressure_split_minus(Mʀ)
 
+  P⁻ᵢ₊₁ = Mach_criteria * P⁻ᵢ₊₁_a + !Mach_criteria * P⁻ᵢ₊₁_b
+  return P⁻ᵢ₊₁
 end
 
-@inline function modified_pressure_split(Mʟ, Mʀ, Mstarᵢ, Mstarᵢ₊₁, ρᵢ, uᵢ, pᵢ, ρᵢ₊₁, uᵢ₊₁, pᵢ₊₁)
-    if Mstarᵢ > 1 && Mstarᵢ₊₁ < 1 && 0 < Mstarᵢ * Mstarᵢ₊₁ < 1
-        P⁻ᵢ₊₁ = max(0, min(0.5, 1 - ((ρᵢ * uᵢ * (uᵢ - uᵢ₊₁) + pᵢ) / pᵢ₊₁)))
-    else
-        P⁻ᵢ₊₁ = pressure_split_minus(Mʀ)
-    end
+@inline function modified_pressure_split(
+  Mʟ, Mʀ, Mstarᵢ, Mstarᵢ₊₁, ρᵢ, uᵢ, pᵢ, ρᵢ₊₁, uᵢ₊₁, pᵢ₊₁
+)
+  if Mstarᵢ > 1 && Mstarᵢ₊₁ < 1 && 0 < Mstarᵢ * Mstarᵢ₊₁ < 1
+    P⁻ᵢ₊₁ = max(0, min(0.5, 1 - ((ρᵢ * uᵢ * (uᵢ - uᵢ₊₁) + pᵢ) / pᵢ₊₁)))
+  else
+    P⁻ᵢ₊₁ = pressure_split_minus(Mʀ)
+  end
 
-    return P⁻ᵢ₊₁
-
+  return P⁻ᵢ₊₁
 end
 
-@inline function modified_pressure_split2(Mʟ, Mʀ, Mstarᵢ, Mstarᵢ₊₁, ρᵢ, uᵢ, pᵢ, ρᵢ₊₁, uᵢ₊₁, pᵢ₊₁)
-    if Mstarᵢ > 1 && Mstarᵢ₊₁ < 1 && 0 < Mstarᵢ * Mstarᵢ₊₁ < 1
-        P⁻ᵢ₊₁ = max(0, min(0.5, 1 - ((ρᵢ * uᵢ * (uᵢ - uᵢ₊₁) + pᵢ) / pᵢ₊₁)))
-    else
-        P⁻ᵢ₊₁ = pressure_split_minus_nobranch(Mʀ)
-    end
+@inline function modified_pressure_split2(
+  Mʟ, Mʀ, Mstarᵢ, Mstarᵢ₊₁, ρᵢ, uᵢ, pᵢ, ρᵢ₊₁, uᵢ₊₁, pᵢ₊₁
+)
+  if Mstarᵢ > 1 && Mstarᵢ₊₁ < 1 && 0 < Mstarᵢ * Mstarᵢ₊₁ < 1
+    P⁻ᵢ₊₁ = max(0, min(0.5, 1 - ((ρᵢ * uᵢ * (uᵢ - uᵢ₊₁) + pᵢ) / pᵢ₊₁)))
+  else
+    P⁻ᵢ₊₁ = pressure_split_minus_nobranch(Mʀ)
+  end
 
-    return P⁻ᵢ₊₁
-
+  return P⁻ᵢ₊₁
 end
 
 begin
-    Mʟ = abs(rand())
-    Mʀ = abs(rand())
-    Mstarᵢ = abs(rand())
-    Mstarᵢ₊₁ = abs(rand())
-    ρᵢ = abs(rand())
-    uᵢ = abs(rand())
-    pᵢ = abs(rand())
-    ρᵢ₊₁ = abs(rand())
-    uᵢ₊₁ = abs(rand())
-    pᵢ₊₁ = abs(rand())
+  Mʟ = abs(rand())
+  Mʀ = abs(rand())
+  Mstarᵢ = abs(rand())
+  Mstarᵢ₊₁ = abs(rand())
+  ρᵢ = abs(rand())
+  uᵢ = abs(rand())
+  pᵢ = abs(rand())
+  ρᵢ₊₁ = abs(rand())
+  uᵢ₊₁ = abs(rand())
+  pᵢ₊₁ = abs(rand())
 
-    Mʟ_vec = @SVector (rand(4))
-    Mʀ_vec = @SVector (rand(4))
-    Mstarᵢ_vec = @SVector (rand(4))
-    Mstarᵢ₊₁_vec = @SVector (rand(4))
-    ρᵢ_vec = @SVector (rand(4))
-    uᵢ_vec = @SVector (rand(4))
-    pᵢ_vec = @SVector (rand(4))
-    ρᵢ₊₁_vec = @SVector (rand(4))
-    uᵢ₊₁_vec = @SVector (rand(4))
-    pᵢ₊₁_vec = @SVector (rand(4))
+  Mʟ_vec = @SVector (rand(4))
+  Mʀ_vec = @SVector (rand(4))
+  Mstarᵢ_vec = @SVector (rand(4))
+  Mstarᵢ₊₁_vec = @SVector (rand(4))
+  ρᵢ_vec = @SVector (rand(4))
+  uᵢ_vec = @SVector (rand(4))
+  pᵢ_vec = @SVector (rand(4))
+  ρᵢ₊₁_vec = @SVector (rand(4))
+  uᵢ₊₁_vec = @SVector (rand(4))
+  pᵢ₊₁_vec = @SVector (rand(4))
 end
 
 modified_pressure_split(Mʟ, Mʀ, Mstarᵢ, Mstarᵢ₊₁, ρᵢ, uᵢ, pᵢ, ρᵢ₊₁, uᵢ₊₁, pᵢ₊₁)
 modified_pressure_split_nobranch(Mʟ, Mʀ, Mstarᵢ, Mstarᵢ₊₁, ρᵢ, uᵢ, pᵢ, ρᵢ₊₁, uᵢ₊₁, pᵢ₊₁)
 
-@benchmark modified_pressure_split($Mʟ, $Mʀ, $Mstarᵢ, $Mstarᵢ₊₁, $ρᵢ, $uᵢ, $pᵢ, $ρᵢ₊₁, $uᵢ₊₁, $pᵢ₊₁)
-@benchmark modified_pressure_split_nobranch($Mʟ, $Mʀ, $Mstarᵢ, $Mstarᵢ₊₁, $ρᵢ, $uᵢ, $pᵢ, $ρᵢ₊₁, $uᵢ₊₁, $pᵢ₊₁)
+@benchmark modified_pressure_split(
+  $Mʟ, $Mʀ, $Mstarᵢ, $Mstarᵢ₊₁, $ρᵢ, $uᵢ, $pᵢ, $ρᵢ₊₁, $uᵢ₊₁, $pᵢ₊₁
+)
+@benchmark modified_pressure_split_nobranch(
+  $Mʟ, $Mʀ, $Mstarᵢ, $Mstarᵢ₊₁, $ρᵢ, $uᵢ, $pᵢ, $ρᵢ₊₁, $uᵢ₊₁, $pᵢ₊₁
+)
 
-modified_pressure_split.(Mʟ_vec, Mʀ_vec, Mstarᵢ_vec, Mstarᵢ₊₁_vec, ρᵢ_vec, uᵢ_vec, pᵢ_vec, ρᵢ₊₁_vec, uᵢ₊₁_vec, pᵢ₊₁_vec)
-modified_pressure_split_nobranch.(Mʟ_vec, Mʀ_vec, Mstarᵢ_vec, Mstarᵢ₊₁_vec, ρᵢ_vec, uᵢ_vec, pᵢ_vec, ρᵢ₊₁_vec, uᵢ₊₁_vec, pᵢ₊₁_vec)
+modified_pressure_split.(
+  Mʟ_vec,
+  Mʀ_vec,
+  Mstarᵢ_vec,
+  Mstarᵢ₊₁_vec,
+  ρᵢ_vec,
+  uᵢ_vec,
+  pᵢ_vec,
+  ρᵢ₊₁_vec,
+  uᵢ₊₁_vec,
+  pᵢ₊₁_vec,
+)
+modified_pressure_split_nobranch.(
+  Mʟ_vec,
+  Mʀ_vec,
+  Mstarᵢ_vec,
+  Mstarᵢ₊₁_vec,
+  ρᵢ_vec,
+  uᵢ_vec,
+  pᵢ_vec,
+  ρᵢ₊₁_vec,
+  uᵢ₊₁_vec,
+  pᵢ₊₁_vec,
+)
 
-@benchmark modified_pressure_split.($Mʟ_vec, $Mʀ_vec, $Mstarᵢ_vec, $Mstarᵢ₊₁_vec, $ρᵢ_vec, $uᵢ_vec, $pᵢ_vec, $ρᵢ₊₁_vec, $uᵢ₊₁_vec, $pᵢ₊₁_vec)
-@benchmark modified_pressure_split2.($Mʟ_vec, $Mʀ_vec, $Mstarᵢ_vec, $Mstarᵢ₊₁_vec, $ρᵢ_vec, $uᵢ_vec, $pᵢ_vec, $ρᵢ₊₁_vec, $uᵢ₊₁_vec, $pᵢ₊₁_vec)
-@benchmark modified_pressure_split_nobranch.($Mʟ_vec, $Mʀ_vec, $Mstarᵢ_vec, $Mstarᵢ₊₁_vec, $ρᵢ_vec, $uᵢ_vec, $pᵢ_vec, $ρᵢ₊₁_vec, $uᵢ₊₁_vec, $pᵢ₊₁_vec)
+@benchmark modified_pressure_split.(
+  $Mʟ_vec,
+  $Mʀ_vec,
+  $Mstarᵢ_vec,
+  $Mstarᵢ₊₁_vec,
+  $ρᵢ_vec,
+  $uᵢ_vec,
+  $pᵢ_vec,
+  $ρᵢ₊₁_vec,
+  $uᵢ₊₁_vec,
+  $pᵢ₊₁_vec,
+)
+@benchmark modified_pressure_split2.(
+  $Mʟ_vec,
+  $Mʀ_vec,
+  $Mstarᵢ_vec,
+  $Mstarᵢ₊₁_vec,
+  $ρᵢ_vec,
+  $uᵢ_vec,
+  $pᵢ_vec,
+  $ρᵢ₊₁_vec,
+  $uᵢ₊₁_vec,
+  $pᵢ₊₁_vec,
+)
+@benchmark modified_pressure_split_nobranch.(
+  $Mʟ_vec,
+  $Mʀ_vec,
+  $Mstarᵢ_vec,
+  $Mstarᵢ₊₁_vec,
+  $ρᵢ_vec,
+  $uᵢ_vec,
+  $pᵢ_vec,
+  $ρᵢ₊₁_vec,
+  $uᵢ₊₁_vec,
+  $pᵢ₊₁_vec,
+)

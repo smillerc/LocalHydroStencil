@@ -1,6 +1,5 @@
 using LocalHydroStencil
 using Test
+using TestItemRunner
 
-@testset "LocalHydroStencil.jl" begin
-    # Write your tests here.
-end
+@run_package_tests

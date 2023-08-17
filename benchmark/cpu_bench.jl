@@ -42,12 +42,12 @@ dt = 1e-5
 U⃗ = zeros(4, M, N);
 
 for j in axes(mesh.volume, 2)
-    for i in axes(mesh.volume, 1)
-        U⃗[1, i, j] = ρ0[i, j]
-        U⃗[2, i, j] = ρ0[i, j] * u0[i, j]
-        U⃗[3, i, j] = ρ0[i, j] * v0[i, j]
-        U⃗[4, i, j] = ρ0[i, j] * E0[i, j]
-    end
+  for i in axes(mesh.volume, 1)
+    U⃗[1, i, j] = ρ0[i, j]
+    U⃗[2, i, j] = ρ0[i, j] * u0[i, j]
+    U⃗[3, i, j] = ρ0[i, j] * v0[i, j]
+    U⃗[4, i, j] = ρ0[i, j] * E0[i, j]
+  end
 end
 
 ρ = @view U⃗[1, :, :]
@@ -68,11 +68,20 @@ skip_uniform = false
 # Marker.init()
 println("Warmup")
 # integrate!(time_int, U⃗, mesh, eos, dt, RS, muscl_sarr_turbo_split2, minmod, skip_uniform)
-integrate!(time_int, U⃗, mesh, eos, dt, RS_bcast, muscl_sarr_turbo_split2, minmod, skip_uniform)
+integrate!(
+  time_int, U⃗, mesh, eos, dt, RS_bcast, muscl_sarr_turbo_split2, minmod, skip_uniform
+)
 
 b = @benchmark integrate!(
-    $time_int, $U⃗, $mesh, $eos, $dt, $RS_bcast,
-    $muscl_sarr_turbo_split2, $minmod, $skip_uniform
+  $time_int,
+  $U⃗,
+  $mesh,
+  $eos,
+  $dt,
+  $RS_bcast,
+  $muscl_sarr_turbo_split2,
+  $minmod,
+  $skip_uniform,
 )
 
 @show b

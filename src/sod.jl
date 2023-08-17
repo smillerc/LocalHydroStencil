@@ -40,12 +40,12 @@ dt = 1e-5
 U⃗ = zeros(4, M, N)
 
 for j in 1:M
-    for i in 1:N
-        U⃗[1, i, j] = ρ0[i, j]
-        U⃗[2, i, j] = ρ0[i, j] * u0[i, j]
-        U⃗[3, i, j] = ρ0[i, j] * v0[i, j]
-        U⃗[4, i, j] = ρ0[i, j] * E0[i, j]
-    end
+  for i in 1:N
+    U⃗[1, i, j] = ρ0[i, j]
+    U⃗[2, i, j] = ρ0[i, j] * u0[i, j]
+    U⃗[3, i, j] = ρ0[i, j] * v0[i, j]
+    U⃗[4, i, j] = ρ0[i, j] * E0[i, j]
+  end
 end
 
 ρ = @view U⃗[1, :, :]
@@ -63,17 +63,17 @@ dt = CFL * next_Δt(U⃗, mesh, eos)
 t = 0.0
 
 for iter in 1:500
-    println("i=$iter, t=$t, dt=$dt")
-    if t > 0.1
-        break
-    end
-    global dt = CFL * next_Δt(U⃗, mesh, eos)
-    # SSPRK3(time_int,U⃗,RS,mesh,eos,dt)
-    # SSPRK3_gc_preserve(time_int,U⃗,RS,mesh,eos,dt)
-    SSPRK3_vec(time_int, U⃗, RS, mesh, eos, dt)
-    # SSPRK3(time_int,U⃗,RS,mesh,eos,dt)
-    copy!(U⃗, time_int.U⃗3)
-    global t += dt
+  println("i=$iter, t=$t, dt=$dt")
+  if t > 0.1
+    break
+  end
+  global dt = CFL * next_Δt(U⃗, mesh, eos)
+  # SSPRK3(time_int,U⃗,RS,mesh,eos,dt)
+  # SSPRK3_gc_preserve(time_int,U⃗,RS,mesh,eos,dt)
+  SSPRK3_vec(time_int, U⃗, RS, mesh, eos, dt)
+  # SSPRK3(time_int,U⃗,RS,mesh,eos,dt)
+  copy!(U⃗, time_int.U⃗3)
+  global t += dt
 end
 
 xc = cumsum(diff(x));

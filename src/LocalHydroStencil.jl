@@ -13,11 +13,11 @@ include("stencil.jl")
 using .StencilType
 export Stencil9Point, Stencil9PointSplit, get_block
 
-include("mausmpw_riemann_solver.jl")
+include("riemann_solver.jl")
 using .RiemannSolverType
 export M_AUSMPWPlus2D, MAUSMPW⁺, ∂U∂t
 
-include("ssprk3.jl")
+include("integrate.jl")
 using .SSPRKType
 export SSPRK3IntegratorCPU, integrate!
 

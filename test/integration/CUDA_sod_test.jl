@@ -1,8 +1,8 @@
 
 using Revise, .Threads, BenchmarkTools
 using KernelAbstractions
-using CUDA, CUDAKernels
-# using Cygnus
+using CUDA
+using CUDA.CUDAKernels
 using CairoMakie
 using ThreadPinning
 
@@ -42,12 +42,12 @@ dt = 1e-5
 U⃗0 = zeros(4, M, N);
 
 for j in 1:M
-    for i in 1:N
-        U⃗0[1, i, j] = ρ0[i, j]
-        U⃗0[2, i, j] = ρ0[i, j] * u0[i, j]
-        U⃗0[3, i, j] = ρ0[i, j] * v0[i, j]
-        U⃗0[4, i, j] = ρ0[i, j] * E0[i, j]
-    end
+  for i in 1:N
+    U⃗0[1, i, j] = ρ0[i, j]
+    U⃗0[2, i, j] = ρ0[i, j] * u0[i, j]
+    U⃗0[3, i, j] = ρ0[i, j] * v0[i, j]
+    U⃗0[4, i, j] = ρ0[i, j] * E0[i, j]
+  end
 end
 
 RS = M_AUSMPWPlus2D()
@@ -66,7 +66,7 @@ eos_gpu = cu(eos)
 SSPRK_kernel = SSPRK3_gpu_lmem!(Device(), (32, 32))
 
 kernel_event = SSPRK_kernel(
-    time_int_gpu, U⃗, RS, mesh_gpu, eos_gpu, dt, Val(cmesh.nhalo); ndrange=(M, N)
+  time_int_gpu, U⃗, RS, mesh_gpu, eos_gpu, dt, Val(cmesh.nhalo); ndrange=(M, N)
 )
 wait(kernel_event)
 
