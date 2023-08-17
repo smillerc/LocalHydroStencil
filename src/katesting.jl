@@ -110,7 +110,11 @@ wait(diffusion_kernel(domain, a, dt, dx, dy; ndrange=(N, N)))
     i, j = @index(Global, NTuple)
     li, lj = @index(Local, NTuple)
     lmem = @localmem eltype(data) (@groupsize()[1] + 2, @groupsize()[2] + 2)
-    @uniform ldata = OffsetArray(lmem, 0:(@groupsize()[1] + 1), 0:(@groupsize()[2] + 1))
+    @uniform ldata = OffsetArray(
+        lmem, 
+        0:(@groupsize()[1] + 1), 
+        0:(@groupsize()[2] + 1)
+    )
 
     # Load data from global to local buffer
     @inbounds begin
@@ -128,7 +132,7 @@ wait(diffusion_kernel(domain, a, dt, dx, dy; ndrange=(N, N)))
             ldata[li, lj + 1] = data[i, j + 1]
         end
     end
-    @synchronize()
+    @synchronize()  
 
     @inbounds begin
         dij = ldata[li, lj]

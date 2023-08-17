@@ -1,12 +1,15 @@
 
 using .Threads, BenchmarkTools
 using LocalHydroStencil
+using BenchmarkTools
 # using LIKWID
-using TimerOutputs
+# using TimerOutputs
+# using IntelITT
+
 # using ProfileView
 eos = IdealEOS(1.4)
 # dx = 0.0001
-dx = 0.001
+dx = 0.0005
 # dx = 4e-4
 x = collect(-0.2:dx:0.2)
 y = collect(-0.2:dx:0.2)
@@ -59,55 +62,23 @@ time_int = SSPRK3IntegratorCPU(U⃗)
 
 println("nthreads: ", nthreads())
 
-# Julia threads must be pinned! Printing the thread affinity.
-# @threads :static for tid in 1:nthreads()
-#     core = LIKWID.get_processor_id()
-#     println("Thread $tid, Core $core")
-# end
-
-println("N zones: ", length(U⃗))
+# println("N zones: ", length(U⃗))
 skip_uniform = false
 
 # Marker.init()
 println("Warmup")
 # integrate!(time_int, U⃗, mesh, eos, dt, RS, muscl_sarr_turbo_split2, minmod, skip_uniform)
-integrate!(time_int, U⃗, mesh, eos, dt, RS_orig, muscl, minmod, skip_uniform)
 integrate!(time_int, U⃗, mesh, eos, dt, RS_bcast, muscl_sarr_turbo_split2, minmod, skip_uniform)
 
-# @profview begin
-#     for _ in 1:150
-#         integrate!(time_int, U⃗, mesh, eos, dt, RS_bcast, muscl_sarr_turbo_split2, minmod, skip_uniform)
-#         # integrate!(time_int, U⃗, mesh, eos, dt, RS, muscl_sarr_turbo_split2, minmod, skip_uniform)
+b = @benchmark integrate!(
+    $time_int, $U⃗, $mesh, $eos, $dt, $RS_bcast,
+    $muscl_sarr_turbo_split2, $minmod, $skip_uniform
+)
+
+@show b
+# IntelITT.@collect begin
+#     for cyc in 1:50
+#         println("cycle: $cyc")
+#         IntelITT.@task "integrate" integrate!(time_int, U⃗, mesh, eos, dt, RS_bcast, muscl_sarr_turbo_split2, minmod, skip_uniform)
 #     end
 # end
-
-    # println("Benchmarking with muscl orig")
-    # @benchmark begin
-    #     integrate!($time_int, $U⃗, $mesh, $eos, $dt, $RS_orig, $muscl, $minmod, $skip_uniform)
-    # end
-
-    println("Benchmarking with muscl_sarr_turbo_split2")
-    @benchmark begin
-        integrate!($time_int, $U⃗, $mesh, $eos, $dt, $RS, $muscl_sarr_turbo_split2, $minmod, $skip_uniform)
-    end
-
-# println("Benchmarking with mausmpw bcast + muscl_sarr_turbo_split2")
-# @benchmark begin
-#     integrate!($time_int, $U⃗, $mesh, $eos, $dt, $RS_bcast, $muscl_sarr_turbo_split2, $minmod, $skip_uniform)
-# end
-
-
-# reset_timer!()
-# @profview begin
-#     for iter in 1:50
-#         # println("Iter: ", iter)
-#         integrate!(time_int, U⃗, mesh, eos, dt, RS, muscl, minmod, skip_uniform)
-#     end
-# end
-# # print_timer()
-
-# # reset_timer!()
-# @profview integrate!(time_int, U⃗, mesh, eos, dt, RS, muscl, minmod, skip_uniform)
-
-
-# Marker.close()

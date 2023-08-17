@@ -153,9 +153,9 @@ end
 
     # Stage 1
     # @timeit "stage 1" begin
-    @batch per=thread for j in jlo:jhi
+    @batch per=core for j in jlo:jhi
         for i in ilo:ihi
-            @marker "dUdt" begin
+            # @marker "dUdt" begin
                 U⁽ⁿ⁾ = SVector{4,T}(view(U⃗n, :, i, j))
                 U_local = get_block(U⃗n, i, j)
                 S⃗ = @SVector zeros(4)
@@ -166,7 +166,7 @@ end
                 stencil = Stencil9Point(U_local, S⃗, n̂, ΔS, Ω, EOS, x⃗_c)
                 ∂U⁽ⁿ⁾∂t = riemann_solver.∂U∂t(stencil, recon, limiter, skip_uniform)
                 U⃗1[:, i, j] = U⁽ⁿ⁾ + ∂U⁽ⁿ⁾∂t * dt
-            end
+            # end
         end
     end
 
@@ -176,9 +176,9 @@ end
     # sync_halo!(U⃗1, nhalo)
 
     # Stage 2
-    @batch per=thread for j in jlo:jhi
+    @batch per=core for j in jlo:jhi
         for i in ilo:ihi
-            @marker "dUdt" begin
+            # @marker "dUdt" begin
                 U⁽¹⁾ = SVector{4,T}(view(U⃗1, :, i, j))
                 U⁽ⁿ⁾ = SVector{4,T}(view(U⃗n, :, i, j))
                 U_local = get_block(U⃗1, i, j)
@@ -191,7 +191,7 @@ end
                 ∂U⁽¹⁾∂t = riemann_solver.∂U∂t(stencil, recon, limiter, skip_uniform)
                 U⁽²⁾ = 0.75U⁽ⁿ⁾ + 0.25U⁽¹⁾ + ∂U⁽¹⁾∂t * 0.25dt
                 U⃗2[:, i, j] = U⁽²⁾
-            end
+            # end
         end
     end
 
@@ -201,9 +201,9 @@ end
     # sync_halo!(U⃗2, nhalo)
 
     # Stage 3
-    @batch per=thread for j in jlo:jhi
+    @batch per=core for j in jlo:jhi
         for i in ilo:ihi
-            @marker "dUdt" begin
+            # @marker "dUdt" begin
                 U⁽²⁾ = SVector{4,T}(view(U⃗2, :, i, j))
                 U⁽ⁿ⁾ = SVector{4,T}(view(U⃗n, :, i, j))
                 U_local = get_block(U⃗2, i, j)
@@ -216,7 +216,7 @@ end
                 ∂U⁽²⁾∂t = riemann_solver.∂U∂t(stencil, recon, limiter, skip_uniform)
                 U⁽ⁿ⁺¹⁾ = (1 / 3) * U⁽ⁿ⁾ + (2 / 3) * U⁽²⁾ + ∂U⁽²⁾∂t * (2 / 3) * dt
                 U⃗3[:, i, j] = U⁽ⁿ⁺¹⁾
-            end
+            # end
         end
     end
 
