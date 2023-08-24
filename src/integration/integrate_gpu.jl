@@ -8,13 +8,28 @@ function integrate!(
   # BCs,
   riemann_solver,
   recon::F2,
-  limiter::F3,
-  skip_uniform=true,
-) where {T,N,F2,F3}
-
+  limiter::F3, backend) where {T,N,F2,F3}
+  
   # call the kernel here
-  println("calling the KA version!")
+  skip_uniform = true
+  println("calling the KA version on ", backend)
+  rows = size(U⃗n, 2)
+  cols = size(U⃗n, 3)
+  U⃗1 = SS.U⃗1
+  U⃗2 = SS.U⃗2
+  U⃗3 = SS.U⃗3
+  @show size(U⃗1)
+  @show size(U⃗n)
+  blkdim_x = 16
+  blkdim_y = 16
+  kernel = _integrate_ka!(backend)
+  kernel(U⃗n, U⃗1, U⃗2, U⃗3, mesh, EOS, dt, riemann_solver, recon, limiter, skip_uniform, ndrange=(rows, cols), workgroupsize=(blkdim_y, blkdim_x))
+  synchronize(backend)
 
+end
+
+function getvec(A::AbstractArray{T,3}, i, j) where {T}
+  return SVector{4,T}(view(A, :, i, j))
 end
 
 @kernel function _integrate_ka!(
@@ -29,7 +44,7 @@ end
   riemann_solver,
   recon::F2,
   limiter::F3,
-  skip_uniform=true,
+  skip_uniform,
 ) where {T,N,F2,F3}
   i, j = @index(Global, NTuple)
 
@@ -42,21 +57,29 @@ end
   ihi = last(ilohi) - nh
   jhi = last(jlohi) - nh
 
+  ΔS_face = mesh.facelen
+  vol = mesh.volume
+  norms = mesh.facenorms
+  centroid_pos = mesh.centroid
+
   # stage 1
   if (ilo <= i <= ihi) && (jlo <= j <= jhi)
-    U⁽ⁿ⁾ = SVector{4,T}(view(U⃗n, :, i, j))
+    U⁽ⁿ⁾ = SVector{4,T}(view(U⃗n, 1:4, i, j))
+    #U⁽ⁿ⁾ = getvec(U⃗n, i,j)
     U_local = get_block(U⃗n, i, j)
     S⃗ = @SVector zeros(4)
-    n̂ = SMatrix{2,4}(view(norms, :, :, i, j))
-    ΔS = SVector{4,T}(view(ΔS_face, :, i, j))
+    n̂ = SMatrix{2,4}(view(norms, 1:2, 1:4, i, j))
+    ΔS = SVector{4,T}(view(ΔS_face, 1:4, i, j))
     Ω = vol[i, j]
-    x⃗_c = SVector{2,T}(view(centroid_pos, :, i, j))
+    x⃗_c = SVector{2,T}(view(centroid_pos, 1:2, i, j))
     stencil = Stencil9Point(U_local, S⃗, n̂, ΔS, Ω, EOS, x⃗_c)
     ∂U⁽ⁿ⁾∂t = riemann_solver.∂U∂t(stencil, recon, limiter, skip_uniform)
-    U⃗1[:, i, j] = U⁽ⁿ⁾ + ∂U⁽ⁿ⁾∂t * dt
+    for ind in 1:4
+      U⃗1[ind, i, j] = U⁽ⁿ⁾[ind] + (∂U⁽ⁿ⁾∂t[ind] * dt)
+    end
   end
 
-  @synchronize()
+  #@synchronize()
 
   # @inbounds begin
   #   if (ilo <= i <= ihi) && (jlo <= j <= jhi)
