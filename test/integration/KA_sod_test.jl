@@ -1,13 +1,19 @@
+using Revise
 using KernelAbstractions
-using LocalHydroStencil
-
-const BACKEND = :METAL
+using LocalHydroStencil 
+#include("D:\Scratch\LocalHydroStencil\src\LocalHydroStencil.jl")
+#import LocalHydroStencil
+#include("../../src/LocalHydroStencil.jl")
+#using .LocalHydroStencil
+#using ../../src/LocalHydroStencil
+using Adapt
+const BACKEND = :CUDA
 
 if BACKEND == :CUDA
   using CUDA
   using CUDA.CUDAKernels
   const ArrayT = CuArray
-  const Device = CUDADevice
+  #const Device = CUDADevice()
   const backend = CUDABackend()
   CUDA.allowscalar(false)
 elseif BACKEND == :METAL
@@ -70,18 +76,23 @@ function main()
     U_device = adapt(ArrayT, U .|> Float32)
   else
     U_device = adapt(ArrayT, U)
+    mesh = adapt(ArrayT, mesh)
   end
 
   copy!(U_device, U)
-
+  U = adapt(ArrayT, U)
   riemann_solver = M_AUSMPWPlus2D()
   time_int = SSPRK3(U_device)
+  println(typeof(U_device))
+  println(typeof(time_int))
+  println(typeof(U))
+  #println(eltype(U_device))
 
   dt = 1e-5
 
   skip_uniform = false
-  println("Running integrate on $(backend)")
-  integrate!(time_int, U, mesh, eos, dt, riemann_solver, muscl, minmod, skip_uniform)
+  println("Running integrate on ", backend)
+  integrate!(time_int, U, mesh, eos, dt, riemann_solver, muscl, minmod, backend)
 
   println("Updating solution")
   copy!(U, time_int.U⃗3)
