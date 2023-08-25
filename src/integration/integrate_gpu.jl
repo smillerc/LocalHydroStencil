@@ -1,3 +1,45 @@
+function sync_halo!(U, nhalo)
+  ilohi = axes(U, 2)
+  jlohi = axes(U, 3)
+  ilo = first(ilohi) + nhalo
+  jlo = first(jlohi) + nhalo
+  ihi = last(ilohi) - nhalo
+  jhi = last(jlohi) - nhalo
+
+  for j in 1:(jlo - 1)
+    for i in ilo:ihi
+      for q in axes(U, 1)
+        U[q, i, j] = U[q, i, jlo]
+      end
+    end
+  end
+
+  for j in (jhi - nhalo):last(jlohi)
+    for i in ilo:ihi
+      for q in axes(U, 1)
+        U[q, i, j] = U[q, i, jhi]
+      end
+    end
+  end
+
+  for j in jlo:jhi
+    for i in first(ilohi):(ilo - 1)
+      for q in axes(U, 1)
+        U[q, i, j] = U[q, ilo, j]
+      end
+    end
+  end
+
+  for j in jlo:jhi
+    for i in (ihi - nhalo):last(ilohi)
+      for q in axes(U, 1)
+        U[q, i, j] = U[q, ihi, j]
+      end
+    end
+  end
+
+  return nothing
+end
 
 function integrate!(
   SS::SSPRK3,
@@ -46,6 +88,7 @@ end
   limiter::F3,
   skip_uniform,
 ) where {T,N,F2,F3}
+
   i, j = @index(Global, NTuple)
 
   nh = mesh.nhalo
@@ -79,7 +122,49 @@ end
     end
   end
 
-  #@synchronize()
+  @synchronize()
+  sync_halo!(U⃗1, nh)
+  @synchronize()
+
+  # Stage 2
+  if (ilo <= i <= ihi) && (jlo <= j <= jhi)
+    U⁽¹⁾ = SVector{4,T}(view(U⃗1, 1:4, i, j))
+    U⁽ⁿ⁾ = SVector{4,T}(view(U⃗n, 1:4, i, j))
+    U_local = get_block(U⃗1, i, j)
+    S⃗ = @SVector zeros(4)
+    n̂ = SMatrix{2,4}(view(norms, 1:2, 1:4, i, j))
+    ΔS = SVector{4,T}(view(ΔS_face, 1:4, i, j))
+    Ω = vol[i, j]
+    x⃗_c = SVector{2,T}(view(centroid_pos, 1:2, i, j))
+    stencil = Stencil9Point(U_local, S⃗, n̂, ΔS, Ω, EOS, x⃗_c)
+    ∂U⁽¹⁾∂t = riemann_solver.∂U∂t(stencil, recon, limiter, skip_uniform)
+    U⁽²⁾ = 0.75U⁽ⁿ⁾ + 0.25U⁽¹⁾ + ∂U⁽¹⁾∂t * 0.25dt
+    for ind in 1:4
+      U⃗2[ind, i, j] = U⁽²⁾[ind]
+    end
+  end
+
+  @synchronize()
+  sync_halo!(U⃗2, nh)
+  @synchronize()
+
+  # Stage 3
+  if (ilo <= i <= ihi) && (jlo <= j <= jhi)
+    U⁽²⁾ = SVector{4,T}(view(U⃗2, 1:4, i, j))
+    U⁽ⁿ⁾ = SVector{4,T}(view(U⃗n, 1:4, i, j))
+    U_local = get_block(U⃗2, i, j)
+    S⃗ = @SVector zeros(4)
+    n̂ = SMatrix{2,4}(view(norms, 1:2, 1:4, i, j))
+    ΔS = SVector{4,T}(view(ΔS_face, 1:4, i, j))
+    Ω = vol[i, j]
+    x⃗_c = SVector{2,T}(view(centroid_pos, 1:2, i, j))
+    stencil = Stencil9Point(U_local, S⃗, n̂, ΔS, Ω, EOS, x⃗_c)
+    ∂U⁽²⁾∂t = riemann_solver.∂U∂t(stencil, recon, limiter, skip_uniform)
+    U⁽ⁿ⁺¹⁾ = (1 / 3) * U⁽ⁿ⁾ + (2 / 3) * U⁽²⁾ + ∂U⁽²⁾∂t * (2 / 3) * dt
+    for ind in 1:4
+      U⃗3[ind, i, j] = U⁽ⁿ⁺¹⁾[ind]
+    end
+  end
 
   # @inbounds begin
   #   if (ilo <= i <= ihi) && (jlo <= j <= jhi)
