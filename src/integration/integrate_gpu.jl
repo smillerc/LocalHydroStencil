@@ -1,4 +1,4 @@
-function sync_halo!(U, nhalo)
+function sync_halo!(U, nhalo, i ,j)
   ilohi = axes(U, 2)
   jlohi = axes(U, 3)
   ilo = first(ilohi) + nhalo
@@ -6,36 +6,28 @@ function sync_halo!(U, nhalo)
   ihi = last(ilohi) - nhalo
   jhi = last(jlohi) - nhalo
 
-  for j in 1:(jlo - 1)
-    for i in ilo:ihi
+  if (j in 1:(jlo - 1)) && (i in ilo:ihi)
       for q in axes(U, 1)
         U[q, i, j] = U[q, i, jlo]
       end
-    end
   end
 
-  for j in (jhi - nhalo):last(jlohi)
-    for i in ilo:ihi
+  if (j in (jhi - nhalo):last(jlohi)) && (i in ilo:ihi)
       for q in axes(U, 1)
         U[q, i, j] = U[q, i, jhi]
       end
-    end
   end
 
-  for j in jlo:jhi
-    for i in first(ilohi):(ilo - 1)
+  if (j in jlo:jhi) && (i in first(ilohi):(ilo - 1))
       for q in axes(U, 1)
         U[q, i, j] = U[q, ilo, j]
       end
-    end
   end
 
-  for j in jlo:jhi
-    for i in (ihi - nhalo):last(ilohi)
+  if (j in jlo:jhi) && (i in (ihi - nhalo):last(ilohi))
       for q in axes(U, 1)
         U[q, i, j] = U[q, ihi, j]
       end
-    end
   end
 
   return nothing
@@ -123,7 +115,7 @@ end
   end
 
   @synchronize()
-  sync_halo!(U⃗1, nh)
+  sync_halo!(U⃗1, nh, i ,j)
   @synchronize()
 
   # Stage 2
@@ -145,7 +137,7 @@ end
   end
 
   @synchronize()
-  sync_halo!(U⃗2, nh)
+  sync_halo!(U⃗2, nh, i, j)
   @synchronize()
 
   # Stage 3
