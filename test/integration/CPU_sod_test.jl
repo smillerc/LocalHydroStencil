@@ -1,5 +1,7 @@
 
+using Revise
 using LocalHydroStencil
+using BenchmarkTools
 
 function initialize(mesh, eos)
   ρL, ρR = 1.0, 0.125
@@ -35,7 +37,7 @@ end
 
 function main()
   eos = IdealEOS(1.4)
-  dx = 0.0005
+  dx = 0.00025
   x = collect(-0.2:dx:0.2)
   y = collect(-0.2:dx:0.2)
 
@@ -56,7 +58,9 @@ function main()
 
   skip_uniform = false
   integrate!(time_int, U, mesh, eos, dt, riemann_solver, muscl, minmod, skip_uniform)
-
+  println("Updating solution")
+  bench = @benchmark integrate!($time_int, $U, $mesh, $eos, $dt, $riemann_solver, $muscl, $minmod, $skip_uniform)
+  @show bench
   copy!(U, time_int.U⃗3)
   return nothing
 end

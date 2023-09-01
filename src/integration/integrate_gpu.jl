@@ -52,14 +52,14 @@ function integrate!(
   U⃗1 = SS.U⃗1
   U⃗2 = SS.U⃗2
   U⃗3 = SS.U⃗3
-  @show size(U⃗1)
-  @show size(U⃗n)
+  #@show size(U⃗1)
+  #@show size(U⃗n)
   blkdim_x = 16
   blkdim_y = 16
+  
   kernel = _integrate_ka!(backend)
   kernel(U⃗n, U⃗1, U⃗2, U⃗3, mesh, EOS, dt, riemann_solver, recon, limiter, skip_uniform, ndrange=(rows, cols), workgroupsize=(blkdim_y, blkdim_x))
   synchronize(backend)
-
 end
 
 function getvec(A::AbstractArray{T,3}, i, j) where {T}

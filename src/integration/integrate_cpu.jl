@@ -1,4 +1,3 @@
-
 function sync_halo!(U, nhalo)
   ilohi = axes(U, 2)
   jlohi = axes(U, 3)
@@ -42,7 +41,8 @@ function sync_halo!(U, nhalo)
   return nothing
 end
 
-@inbounds function integrate_cpu!(
+#@inbounds function integrate_cpu!(
+@inbounds function integrate!(
   SS::SSPRK3,
   U⃗n::Array{T,N},
   mesh,
@@ -90,7 +90,7 @@ end
     end
   end
 
-  # sync_halo!(U⃗1, nhalo)
+  sync_halo!(U⃗1, nhalo)
 
   # Stage 2
   @batch per = core for j in jlo:jhi
@@ -110,7 +110,7 @@ end
     end
   end
 
-  # sync_halo!(U⃗2, nhalo)
+  sync_halo!(U⃗2, nhalo)
 
   # Stage 3
   @batch per = core for j in jlo:jhi
@@ -132,9 +132,10 @@ end
 
   # sync_halo!(U⃗3, nhalo)
   # resids = check_residuals(U⃗2,U⃗1,looplimits)
-  resids = @SVector zeros(4)
-  success = true
-  return success, resids
+  #resids = @SVector zeros(4)
+  #success = true
+  #return success, resids
+  return nothing
 end
 
 function check_residuals(U1, Un, looplimits)

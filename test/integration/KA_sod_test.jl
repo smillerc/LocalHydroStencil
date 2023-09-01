@@ -1,6 +1,7 @@
 using Revise
 using KernelAbstractions
-using LocalHydroStencil 
+using LocalHydroStencil
+using BenchmarkTools
 #include("D:\Scratch\LocalHydroStencil\src\LocalHydroStencil.jl")
 #import LocalHydroStencil
 #include("../../src/LocalHydroStencil.jl")
@@ -63,7 +64,7 @@ end
 
 function main()
   eos = IdealEOS(1.4)
-  dx = 0.0005
+  dx = 0.00025
   x = collect(-0.2:dx:0.2)
   y = collect(-0.2:dx:0.2)
 
@@ -93,8 +94,11 @@ function main()
   skip_uniform = false
   println("Running integrate on ", backend)
   integrate!(time_int, U, mesh, eos, dt, riemann_solver, muscl, minmod, backend)
-
   println("Updating solution")
+  #copy!(U, time_int.U⃗3)
+
+  bench = @benchmark integrate!($time_int, $U, $mesh, $eos, $dt, $riemann_solver, $muscl, $minmod, $backend)
+  @show bench
   copy!(U, time_int.U⃗3)
   return nothing
 end
