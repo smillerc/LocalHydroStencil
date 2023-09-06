@@ -152,6 +152,7 @@ flux_jface = adapt(ArrayT, zeros(4, M, N)); # flux at the j+1/2 face
 cons2prim_kernel = cons2prim!(backend)
 recon_kernel = muscl_gmem!(backend)
 riemann_kernel = LocalHydroStencil.RiemannSolverType.riemann_solver!(backend)
+riemann_kernel_iface = LocalHydroStencil.RiemannSolverType.riemann_solver_iface!(backend)
 
 begin
   # Conservative to Primitive
@@ -167,6 +168,38 @@ begin
     W, W_iface, W_jface, flux_iface, flux_jface, gpumesh, eos, limits; ndrange=(M, N)
   )
   KernelAbstractions.synchronize(backend)
+end
+
+@benchmark begin
+  # Conservative to Primitive
+  cons2prim_kernel($U, $W, $eos; ndrange=($M, $N))
+  KernelAbstractions.synchronize($backend)
+end
+
+@benchmark begin
+  # Reconstruction
+  recon_kernel($W, $W_iface, $W_jface, $limits; ndrange=($M, $N))
+  KernelAbstractions.synchronize($backend)
+end
+
+@benchmark begin
+  riemann_kernel(
+    $W,
+    $W_iface,
+    $W_jface,
+    $flux_iface,
+    $flux_jface,
+    $gpumesh,
+    $eos,
+    $limits;
+    ndrange=($M, $N),
+  )
+  KernelAbstractions.synchronize($backend)
+end
+
+@benchmark begin
+  riemann_kernel_iface($W, $W_iface, $flux_iface, $gpumesh, $eos, $limits; ndrange=($M, $N))
+  KernelAbstractions.synchronize($backend)
 end
 
 @benchmark begin

@@ -370,6 +370,48 @@ end
   end
 end
 
+@kernel function riemann_solver_iface!(
+  W::AbstractArray{T,N}, i_face, flux_i, mesh, EOS, limits
+) where {T,N}
+  i, j = @index(Global, NTuple)
+  ilo, ihi, jlo, jhi = limits
+
+  @inbounds begin
+    # i face
+    if (jlo <= j <= jhi) && (ilo - 1 <= i <= ihi)
+      n̂2 = SVector{2}(view(mesh.facenorms, 1:2, 2, i, j))
+
+      ρʟ, ρʀ = @views i_face[1, 1:4, i, j]
+      uʟ, uʀ = @views i_face[2, 1:4, i, j]
+      vʟ, vʀ = @views i_face[3, 1:4, i, j]
+      pʟ, pʀ = @views i_face[4, 1:4, i, j]
+
+      ρᵢ, ρᵢ₊₁, ρᵢ₊₂ = @views W[1, i:(i + 2), j]
+      uᵢ, uᵢ₊₁, uᵢ₊₂ = @views W[2, i:(i + 2), j]
+      vᵢ, vᵢ₊₁, vᵢ₊₂ = @views W[3, i:(i + 2), j]
+      pᵢ, pᵢ₊₁, pᵢ₊₂ = @views W[4, i:(i + 2), j]
+
+      pᵢⱼ₊₁ = W[4, i, j + 1] / ρᵢ
+      pᵢ₊₁ⱼ = W[4, i + 1, j] / ρᵢ
+      pᵢⱼ₋₁ = W[4, i, j - 1] / ρᵢ
+      pᵢ₊₁ⱼ₊₁ = W[4, i + 1, j + 1] / ρᵢ
+      pᵢ₊₁ⱼ₋₁ = W[4, i + 1, j - 1] / ρᵢ
+      w₂1 = modified_discontinuity_sensor_ξ(1.0, pᵢ₊₁ⱼ, pᵢ₊₁ⱼ₊₁, pᵢ₊₁ⱼ₋₁, pᵢⱼ₊₁, pᵢⱼ₋₁)
+      w₂ = w₂1
+
+      Uᵢ = (ρᵢ, uᵢ, vᵢ, pᵢ)
+      Uᵢ₊₁ = (ρᵢ₊₁, uᵢ₊₁, vᵢ₊₁, pᵢ₊₁)
+
+      Uʟ = (ρʟ, uʟ, vʟ, pʟ)
+      Uʀ = (ρʀ, uʀ, vʀ, pʀ)
+
+      # edge flux
+      F = M_AUSMPWPlus_2Dflux(n̂2, Uᵢ, Uᵢ₊₁, Uʟ, Uʀ, Uʟ, Uʀ, w₂, EOS)
+      flux_i[1:4, i, j] .= F
+    end
+  end
+end
+
 function M_AUSMPWPlus_2Dflux(n̂, Φᵢ, Φᵢ₊₁, Φʟ, Φʀ, Φʟ_sb, Φʀ_sb, w₂, EOS)
 
   # unpack
