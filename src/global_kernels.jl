@@ -174,13 +174,13 @@ end
   # Conservative to Primitive
   cons2prim_kernel($U, $W, $eos; ndrange=($M, $N))
   KernelAbstractions.synchronize($backend)
-end
+end # -> 6ms
 
 @benchmark begin
   # Reconstruction
   recon_kernel($W, $W_iface, $W_jface, $limits; ndrange=($M, $N))
   KernelAbstractions.synchronize($backend)
-end
+end # -> 47ms
 
 @benchmark begin
   riemann_kernel(
@@ -195,12 +195,12 @@ end
     ndrange=($M, $N),
   )
   KernelAbstractions.synchronize($backend)
-end
+end  # -> 111ms
 
 @benchmark begin
   riemann_kernel_iface($W, $W_iface, $flux_iface, $gpumesh, $eos, $limits; ndrange=($M, $N))
   KernelAbstractions.synchronize($backend)
-end
+end # -> 54ms
 
 @benchmark begin
   # Conservative to Primitive
@@ -224,4 +224,4 @@ end
     ndrange=($M, $N),
   )
   KernelAbstractions.synchronize($backend)
-end
+end # -> 164ms
