@@ -44,6 +44,6 @@ function Adapt.adapt_structure(to, SS::SSPRK3)
 end
 
 include("integrate_cpu.jl")
-include("integrate_gpu.jl")
+# include("integrate_gpu.jl")
 
 end

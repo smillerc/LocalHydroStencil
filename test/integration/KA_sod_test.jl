@@ -62,45 +62,53 @@ function initialize(mesh, eos)
   return U⃗
 end
 
-function main()
-  eos = IdealEOS(1.4)
-  dx = 0.00025
-  x = collect(-0.2:dx:0.2)
-  y = collect(-0.2:dx:0.2)
+# function main()
+eos = IdealEOS(1.4)
+dx = 1e-5
+x = collect(-0.2:dx:0.2)
+y = collect(-0.2:dx:0.2)
 
-  nhalo = 2
-  mesh = CartesianMesh(x, y, nhalo)
+nhalo = 2
+mesh = CartesianMesh(x, y, nhalo)
 
-  U = initialize(mesh, eos)
+U = initialize(mesh, eos)
 
-  if BACKEND == :METAL
-    U_device = adapt(ArrayT, U .|> Float32)
-  else
-    U_device = adapt(ArrayT, U)
-    mesh = adapt(ArrayT, mesh)
-  end
-
-  copy!(U_device, U)
-  U = adapt(ArrayT, U)
-  riemann_solver = M_AUSMPWPlus2D()
-  time_int = SSPRK3(U_device)
-  println(typeof(U_device))
-  println(typeof(time_int))
-  println(typeof(U))
-  #println(eltype(U_device))
-
-  dt = 1e-5
-
-  skip_uniform = false
-  println("Running integrate on ", backend)
-  integrate!(time_int, U, mesh, eos, dt, riemann_solver, muscl, minmod, backend)
-  println("Updating solution")
-  #copy!(U, time_int.U⃗3)
-
-  bench = @benchmark integrate!($time_int, $U, $mesh, $eos, $dt, $riemann_solver, $muscl, $minmod, $backend)
-  @show bench
-  copy!(U, time_int.U⃗3)
-  return nothing
+if BACKEND == :METAL
+  U_device = adapt(ArrayT, Float32.(U))
+else
+  U_device = adapt(ArrayT, U)
+  mesh = adapt(ArrayT, mesh)
 end
 
-main()
+copy!(U_device, U)
+U = adapt(ArrayT, U)
+riemann_solver = M_AUSMPWPlus2D()
+time_int = SSPRK3(U_device)
+println(typeof(U_device))
+println(typeof(time_int))
+println(typeof(U))
+#println(eltype(U_device))
+
+dt = 1e-5
+
+skip_uniform = false
+ker = LocalHydroStencil.Integration._integrate_ka!(backend)
+println("Running integrate on ", backend)
+integrate!(time_int, U, mesh, eos, dt, riemann_solver, muscl, minmod, ker)
+println("Updating solution")
+#copy!(U, time_int.U⃗3)
+
+integrate!(time_int, U, mesh, eos, dt, riemann_solver, muscl, minmod, ker)
+size(U)
+# @code_warntype integrate!(time_int, U, mesh, eos, dt, riemann_solver, muscl, minmod, ker)
+
+@benchmark begin
+  integrate!($time_int, $U, $mesh, $eos, $dt, $riemann_solver, $muscl, $minmod, $ker)
+  KernelAbstractions.synchronize($backend)
+end
+#   @show bench
+#   copy!(U, time_int.U⃗3)
+#   return nothing
+# end
+
+# main()

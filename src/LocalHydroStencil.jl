@@ -13,7 +13,7 @@ include("stencil.jl")
 using .StencilType
 export Stencil9Point, Stencil9PointSplit, get_block
 
-include("riemann_solver.jl")
+include("riemann_solver/riemann_solver.jl")
 using .RiemannSolverType
 export M_AUSMPWPlus2D, MAUSMPW⁺, ∂U∂t
 

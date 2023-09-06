@@ -2,6 +2,7 @@ module RiemannSolverType
 
 using StaticArrays
 using LinearAlgebra
+using KernelAbstractions
 
 using ..EOSType
 using ..ReconstructionType
@@ -293,6 +294,180 @@ function MAUSMPW⁺(
   Eflux = Eflux * (abs(Eflux) >= ϵ)
 
   return SVector{4,Float64}(ρflux, ρuflux, ρvflux, Eflux)
+end
+
+@kernel function riemann_solver!(
+  W::AbstractArray{T,N}, i_face, j_face, flux_i, flux_j, mesh, EOS, limits
+) where {T,N}
+  i, j = @index(Global, NTuple)
+  ilo, ihi, jlo, jhi = limits
+
+  @inbounds begin
+    # i face
+    if (jlo <= j <= jhi) && (ilo - 1 <= i <= ihi)
+      n̂2 = SVector{2}(view(mesh.facenorms, 1:2, 2, i, j))
+
+      ρʟ, ρʀ = @views i_face[1, 1:4, i, j]
+      uʟ, uʀ = @views i_face[2, 1:4, i, j]
+      vʟ, vʀ = @views i_face[3, 1:4, i, j]
+      pʟ, pʀ = @views i_face[4, 1:4, i, j]
+
+      ρᵢ, ρᵢ₊₁, ρᵢ₊₂ = @views W[1, i:(i + 2), j]
+      uᵢ, uᵢ₊₁, uᵢ₊₂ = @views W[2, i:(i + 2), j]
+      vᵢ, vᵢ₊₁, vᵢ₊₂ = @views W[3, i:(i + 2), j]
+      pᵢ, pᵢ₊₁, pᵢ₊₂ = @views W[4, i:(i + 2), j]
+
+      pᵢⱼ₊₁ = W[4, i, j + 1] / ρᵢ
+      pᵢ₊₁ⱼ = W[4, i + 1, j] / ρᵢ
+      pᵢⱼ₋₁ = W[4, i, j - 1] / ρᵢ
+      pᵢ₊₁ⱼ₊₁ = W[4, i + 1, j + 1] / ρᵢ
+      pᵢ₊₁ⱼ₋₁ = W[4, i + 1, j - 1] / ρᵢ
+      w₂1 = modified_discontinuity_sensor_ξ(1.0, pᵢ₊₁ⱼ, pᵢ₊₁ⱼ₊₁, pᵢ₊₁ⱼ₋₁, pᵢⱼ₊₁, pᵢⱼ₋₁)
+      w₂ = w₂1
+
+      Uᵢ = (ρᵢ, uᵢ, vᵢ, pᵢ)
+      Uᵢ₊₁ = (ρᵢ₊₁, uᵢ₊₁, vᵢ₊₁, pᵢ₊₁)
+
+      Uʟ = (ρʟ, uʟ, vʟ, pʟ)
+      Uʀ = (ρʀ, uʀ, vʀ, pʀ)
+
+      # edge flux
+      F = M_AUSMPWPlus_2Dflux(n̂2, Uᵢ, Uᵢ₊₁, Uʟ, Uʀ, Uʟ, Uʀ, w₂, EOS)
+      flux_i[1:4, i, j] .= F
+    end
+
+    # j face
+    if (jlo - 1 <= j <= jhi) && (ilo <= i <= ihi)
+      n̂3 = SVector{2}(view(mesh.facenorms, 1:2, 3, i, j))
+
+      ρʟ, ρʀ = @views j_face[1, 1:4, i, j]
+      uʟ, uʀ = @views j_face[2, 1:4, i, j]
+      vʟ, vʀ = @views j_face[3, 1:4, i, j]
+      pʟ, pʀ = @views j_face[4, 1:4, i, j]
+
+      ρᵢ, ρⱼ₊₁, ρⱼ₊₂ = @views W[1, i, j:(j + 2)]
+      uᵢ, uⱼ₊₁, uⱼ₊₂ = @views W[2, i, j:(j + 2)]
+      vᵢ, vⱼ₊₁, vⱼ₊₂ = @views W[3, i, j:(j + 2)]
+      pᵢ, pⱼ₊₁, pⱼ₊₂ = @views W[4, i, j:(j + 2)]
+
+      pᵢ₊₁ⱼ = W[4, i + 1, j] / ρᵢ
+      pᵢ₋₁ⱼ = W[4, i - 1, j] / ρᵢ
+      pᵢⱼ₊₁ = W[4, i, j + 1] / ρᵢ
+      pᵢ₊₁ⱼ₊₁ = W[4, i + 1, j + 1] / ρᵢ
+      pᵢ₋₁ⱼ₊₁ = W[4, i - 1, j + 1] / ρᵢ
+      w₂ = modified_discontinuity_sensor_η(1.0, pᵢ₊₁ⱼ, pᵢ₊₁ⱼ₊₁, pᵢ₋₁ⱼ₊₁, pᵢ₋₁ⱼ, pᵢⱼ₊₁)
+
+      Uⱼ = SVector{4,T}(ρᵢ, uᵢ, vᵢ, pᵢ)
+      Uⱼ₊₁ = SVector{4,T}(ρⱼ₊₁, uⱼ₊₁, vⱼ₊₁, pⱼ₊₁)
+
+      Uʟ = SVector{4,T}(ρʟ, uʟ, vʟ, pʟ)
+      Uʀ = SVector{4,T}(ρʀ, uʀ, vʀ, pʀ)
+
+      # edge flux
+      G = M_AUSMPWPlus_2Dflux(n̂3, Uⱼ, Uⱼ₊₁, Uʟ, Uʀ, Uʟ, Uʀ, w₂, EOS)
+      flux_j[1:4, i, j] .= G
+    end
+  end
+end
+
+function M_AUSMPWPlus_2Dflux(n̂, Φᵢ, Φᵢ₊₁, Φʟ, Φʀ, Φʟ_sb, Φʀ_sb, w₂, EOS)
+
+  # unpack
+  ρʟ, uʟ, vʟ, pʟ = Φʟ
+  ρʀ, uʀ, vʀ, pʀ = Φʀ
+
+  ρʟ_sb, uʟ_sb, vʟ_sb, pʟ_sb = Φʟ_sb
+  ρʀ_sb, uʀ_sb, vʀ_sb, pʀ_sb = Φʀ_sb
+
+  v⃗ʟ = SVector{2,Float64}(uʟ, vʟ)
+  v⃗ʀ = SVector{2,Float64}(uʀ, vʀ)
+
+  ρᵢ, uᵢ, vᵢ, pᵢ = Φᵢ
+  ρᵢ₊₁, uᵢ₊₁, vᵢ₊₁, pᵢ₊₁ = Φᵢ₊₁
+
+  Hʟ = total_enthalpy(EOS, ρʟ, uʟ, vʟ, pʟ)
+  Hʀ = total_enthalpy(EOS, ρʀ, uʀ, vʀ, pʀ)
+
+  # velocity component normal to the face edge
+  Uʟ = uʟ * n̂.x + vʟ * n̂.y
+  Uʀ = uʀ * n̂.x + vʀ * n̂.y
+  Uᵢ = uᵢ * n̂.x + vᵢ * n̂.y
+  Uᵢ₊₁ = uᵢ₊₁ * n̂.x + vᵢ₊₁ * n̂.y
+
+  Vʟ = transverse_component(v⃗ʟ, n̂)
+  Vʀ = transverse_component(v⃗ʀ, n̂)
+
+  # Total enthalpy normal to the edge
+  H_normal = min(Hʟ - 0.5Vʟ^2, Hʀ - 0.5Vʀ^2)
+
+  # Speed of sound normal to the edge, also like the critical sound speed across a normal shock
+  cₛ = sqrt(abs(2((EOS.γ - 1) / (EOS.γ + 1)) * H_normal))
+
+  # Interface sound speed
+  if 0.5(Uʟ + Uʀ) > 0
+    c½ = cₛ^2 / max(abs(Uʟ), cₛ)
+  else
+    c½ = cₛ^2 / max(abs(Uʀ), cₛ)
+  end
+
+  # Left/Right Mach number
+  Mʟ = Uʟ / c½
+  Mʀ = Uʀ / c½
+
+  # Mach splitting functions
+  Mʟ⁺ = mach_split_plus(Mʟ)
+  Mʀ⁻ = mach_split_minus(Mʀ)
+
+  # Modified functions for M-AUSMPW+
+  Mstarᵢ = Uᵢ / cₛ
+  Mstarᵢ₊₁ = Uᵢ₊₁ / cₛ
+  Pʟ⁺, Pʀ⁻ = modified_pressure_split(Mʟ, Mʀ, Mstarᵢ, Mstarᵢ₊₁, ρᵢ, Uᵢ, pᵢ, ρᵢ₊₁, Uᵢ₊₁, pᵢ₊₁)
+  pₛ = pʟ * Pʟ⁺ + pʀ * Pʀ⁻
+  w₁ = discontinuity_sensor(pʟ, pʀ)
+  w = max(w₁, w₂)
+  fʟ = modified_f(pʟ, pₛ, w₂)
+  fʀ = modified_f(pʀ, pₛ, w₂)
+
+  # From Eq. 24 (ii) in Ref [1]
+  if Mʟ⁺ + Mʀ⁻ < 0
+    M̄ʟ⁺ = Mʟ⁺ * w * (1 + fʟ)
+    M̄ʀ⁻ = Mʀ⁻ + Mʟ⁺ * ((1 - w) * (1 + fʟ) - fʀ)
+  else # From Eq. 24 (i) in Ref [1]
+    M̄ʟ⁺ = Mʟ⁺ + Mʀ⁻ * ((1 - w) * (1 + fʀ) - fʟ)
+    M̄ʀ⁻ = Mʀ⁻ * w * (1 + fʀ)
+  end
+  M̄ʟ⁺ = M̄ʟ⁺ * (abs(M̄ʟ⁺) >= 1e-15)
+  M̄ʀ⁻ = M̄ʀ⁻ * (abs(M̄ʀ⁻) >= 1e-15)
+
+  a = 1 - min(1, max(abs(Mʟ), abs(Mʀ)))^2
+  ρʟ½ = ϕ_L_half(ρʟ, ρʀ, ρʟ_sb, a)
+  uʟ½ = ϕ_L_half(uʟ, uʀ, uʟ_sb, a)
+  vʟ½ = ϕ_L_half(vʟ, vʀ, vʟ_sb, a)
+  pʟ½ = ϕ_L_half(pʟ, pʀ, pʟ_sb, a)
+
+  ρʀ½ = ϕ_R_half(ρʟ, ρʀ, ρʀ_sb, a)
+  uʀ½ = ϕ_R_half(uʟ, uʀ, uʀ_sb, a)
+  vʀ½ = ϕ_R_half(vʟ, vʀ, vʀ_sb, a)
+  pʀ½ = ϕ_R_half(pʟ, pʀ, pʀ_sb, a)
+
+  # mass fluxes
+  ṁʟ = M̄ʟ⁺ * c½ * ρʟ½
+  ṁʀ = M̄ʀ⁻ * c½ * ρʀ½
+
+  Hʟ½ = total_enthalpy(EOS, ρʟ½, uʟ½, vʟ½, pʟ½)
+  Hʀ½ = total_enthalpy(EOS, ρʀ½, uʀ½, vʀ½, pʀ½)
+
+  ρflux = ṁʟ + ṁʀ
+  ρuflux = (ṁʟ * uʟ½) + (ṁʀ * uʀ½) + ((Pʟ⁺ * n̂.x * pʟ½) + (Pʀ⁻ * n̂.x * pʀ½))
+  ρvflux = (ṁʟ * vʟ½) + (ṁʀ * vʀ½) + ((Pʟ⁺ * n̂.y * pʟ½) + (Pʀ⁻ * n̂.y * pʀ½))
+  Eflux = (ṁʟ * Hʟ½) + (ṁʀ * Hʀ½)
+
+  ρflux = ρflux * (abs(ρflux) >= ϵ)
+  ρuflux = ρuflux * (abs(ρuflux) >= ϵ)
+  ρvflux = ρvflux * (abs(ρvflux) >= ϵ)
+  Eflux = Eflux * (abs(Eflux) >= ϵ)
+
+  return (ρflux, ρuflux, ρvflux, Eflux)
 end
 
 function _∂U∂t_ninepoint_orig(
