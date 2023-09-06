@@ -37,19 +37,16 @@ end
 
 # function main()
 eos = IdealEOS(1.4)
-dx = 0.00025
+dx = dx = 1e-4
 x = collect(-0.2:dx:0.2)
 y = collect(-0.2:dx:0.2)
+M, N = size(mesh.volume)
+@show (M, N)
 
 nhalo = 2
 mesh = CartesianMesh(x, y, nhalo)
 
 U = initialize(mesh, eos)
-
-# ρ = @view U[1, :, :]
-# ρu = @view U[2, :, :]
-# ρv = @view U[3, :, :]
-# ρE = @view U[4, :, :]
 
 riemann_solver = M_AUSMPWPlus2D()
 time_int = SSPRK3(U)
@@ -59,12 +56,6 @@ dt = 1e-5
 skip_uniform = false
 integrate!(time_int, U, mesh, eos, dt, riemann_solver, muscl, minmod, skip_uniform)
 println("Updating solution")
-bench = @benchmark integrate!(
+@benchmark integrate!(
   $time_int, $U, $mesh, $eos, $dt, $riemann_solver, $muscl, $minmod, $skip_uniform
-)
-#   @show bench
-#   copy!(U, time_int.U⃗3)
-#   return nothing
-# end
-
-# main()
+) # 16 threads -> 1.823s
