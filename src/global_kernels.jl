@@ -92,6 +92,28 @@ end
   end
 end
 
+@kernel function sum_fluxes(
+  dUdt::AbstractArray{T,N}, iflux, jflux, facelen, volume, limits
+) where {T,N}
+  i, j = @index(Global, NTuple)
+  ilo, ihi, jlo, jhi = limits
+
+  ΔS1, ΔS2, ΔS3, ΔS4 = @view facelen[1:4, i, j]
+  @inbounds begin
+    if (jlo <= j <= jhi) && (ilo <= i <= ihi)
+      for q in 1:4
+        dUdt[q, i, j] =
+          (
+            jflux[q, i, j - 1] * ΔS1 +
+            iflux[q, i, j] * ΔS2 +
+            jflux[q, i, j] * ΔS3 +
+            iflux[q, i - 1, j] * ΔS4
+          ) / volume[i, j]
+      end
+    end
+  end
+end
+
 function initialize(mesh, eos)
   ρL, ρR = 1.0, 0.125
   pL, pR = 1.0, 0.1
@@ -143,46 +165,78 @@ T = Float64
 limits = (nh + 1, M - nh, nh + 1, N - nh)
 U = adapt(ArrayT, initialize(mesh, eos));
 W = similar(U); # primitive variables [ρ, u, v, p]
+dUdt = similar(U)
 W_iface = adapt(ArrayT, zeros(2, 4, M, N)); # reconstructed primitive variable at the i+1/2 face
 W_jface = adapt(ArrayT, zeros(2, 4, M, N)); # reconstructed primitive variable at the j+1/2 face
 
 flux_iface = adapt(ArrayT, zeros(4, M, N)); # flux at the i+1/2 face
 flux_jface = adapt(ArrayT, zeros(4, M, N)); # flux at the j+1/2 face
 
+# a single stage consists of the following kernels
 cons2prim_kernel = cons2prim!(backend)
 recon_kernel = muscl_gmem!(backend)
 riemann_kernel = LocalHydroStencil.RiemannSolverType.riemann_solver!(backend)
-riemann_kernel_iface = LocalHydroStencil.RiemannSolverType.riemann_solver_iface!(backend)
+# riemann_kernel_iface = LocalHydroStencil.RiemannSolverType.riemann_solver_iface!(backend)
+flux_kernel = sum_fluxes(backend)
 
-begin
-  # Conservative to Primitive
-  cons2prim_kernel(U, W, eos; ndrange=(M, N))
-  KernelAbstractions.synchronize(backend)
+# begin
+#   # Conservative to Primitive
+#   cons2prim_kernel(U, W, eos; ndrange=(M, N))
+#   KernelAbstractions.synchronize(backend)
 
-  # Reconstruction
-  recon_kernel(W, W_iface, W_jface, limits; ndrange=(M, N))
-  KernelAbstractions.synchronize(backend)
+#   # Reconstruction
+#   recon_kernel(W, W_iface, W_jface, limits; ndrange=(M, N))
+#   KernelAbstractions.synchronize(backend)
 
-  # Riemann solver
-  riemann_kernel(
-    W, W_iface, W_jface, flux_iface, flux_jface, gpumesh, eos, limits; ndrange=(M, N)
-  )
-  KernelAbstractions.synchronize(backend)
-end
+#   # Riemann solver
+#   riemann_kernel(
+#     W, W_iface, W_jface, flux_iface, flux_jface, gpumesh, eos, limits; ndrange=(M, N)
+#   )
+#   KernelAbstractions.synchronize(backend)
+# end
+
+# @benchmark begin
+#   # Conservative to Primitive
+#   cons2prim_kernel($U, $W, $eos; ndrange=($M, $N))
+#   KernelAbstractions.synchronize($backend)
+# end # -> 6ms
+
+# @benchmark begin
+#   # Reconstruction
+#   recon_kernel($W, $W_iface, $W_jface, $limits; ndrange=($M, $N))
+#   KernelAbstractions.synchronize($backend)
+# end # -> 47ms
+
+# @benchmark begin
+#   riemann_kernel(
+#     $W,
+#     $W_iface,
+#     $W_jface,
+#     $flux_iface,
+#     $flux_jface,
+#     $gpumesh,
+#     $eos,
+#     $limits;
+#     ndrange=($M, $N),
+#   )
+#   KernelAbstractions.synchronize($backend)
+# end  # -> 111ms
+
+# # @benchmark begin
+# #   riemann_kernel_iface($W, $W_iface, $flux_iface, $gpumesh, $eos, $limits; ndrange=($M, $N))
+# #   KernelAbstractions.synchronize($backend)
+# # end # -> 54ms
 
 @benchmark begin
   # Conservative to Primitive
   cons2prim_kernel($U, $W, $eos; ndrange=($M, $N))
   KernelAbstractions.synchronize($backend)
-end # -> 6ms
 
-@benchmark begin
   # Reconstruction
   recon_kernel($W, $W_iface, $W_jface, $limits; ndrange=($M, $N))
   KernelAbstractions.synchronize($backend)
-end # -> 47ms
 
-@benchmark begin
+  # Riemann solver
   riemann_kernel(
     $W,
     $W_iface,
@@ -195,33 +249,16 @@ end # -> 47ms
     ndrange=($M, $N),
   )
   KernelAbstractions.synchronize($backend)
-end  # -> 111ms
 
-@benchmark begin
-  riemann_kernel_iface($W, $W_iface, $flux_iface, $gpumesh, $eos, $limits; ndrange=($M, $N))
-  KernelAbstractions.synchronize($backend)
-end # -> 54ms
-
-@benchmark begin
-  # Conservative to Primitive
-  cons2prim_kernel($U, $W, $eos; ndrange=($M, $N))
-  KernelAbstractions.synchronize($backend)
-
-  # Reconstruction
-  recon_kernel($W, $W_iface, $W_jface, $limits; ndrange=($M, $N))
-  KernelAbstractions.synchronize($backend)
-
-  # Riemann solver
-  riemann_kernel(
-    $W,
-    $W_iface,
-    $W_jface,
+  # Sum fluxes
+  flux_kernel(
+    $dUdt,
     $flux_iface,
     $flux_jface,
-    $gpumesh,
-    $eos,
+    $gpumesh.facelen,
+    $gpumesh.volume,
     $limits;
     ndrange=($M, $N),
   )
   KernelAbstractions.synchronize($backend)
-end # -> 164ms
+end # -> 180ms
