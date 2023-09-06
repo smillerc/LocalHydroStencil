@@ -5,6 +5,8 @@ using Polyester
 using StaticArrays
 using Adapt
 using KernelAbstractions
+using CUDA
+using BenchmarkTools
 
 using ..StencilType
 using ..EOSType
@@ -44,6 +46,7 @@ function Adapt.adapt_structure(to, SS::SSPRK3)
 end
 
 include("integrate_cpu.jl")
-include("integrate_gpu.jl")
+#include("integrate_gpu.jl")
+include("integrate_cuda.jl")
 
 end

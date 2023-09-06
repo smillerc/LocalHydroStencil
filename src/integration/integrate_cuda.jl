@@ -42,11 +42,11 @@ function integrate!(
   # BCs,
   riemann_solver,
   recon::F2,
-  limiter::F3, backend) where {T,N,F2,F3}
+  limiter::F3) where {T,N,F2,F3}
   
   # call the kernel here
   skip_uniform = true
-  println("calling the KA version on ", backend)
+  println("Launching CUDA kernel")
   rows = size(U⃗n, 2)
   cols = size(U⃗n, 3)
   U⃗1 = SS.U⃗1
@@ -54,19 +54,24 @@ function integrate!(
   U⃗3 = SS.U⃗3
   #@show size(U⃗1)
   #@show size(U⃗n)
-  blkdim_x = 16
-  blkdim_y = 16
-  
-  kernel = _integrate_ka!(backend)
-  kernel(U⃗n, U⃗1, U⃗2, U⃗3, mesh, EOS, dt, riemann_solver, recon, limiter, skip_uniform, ndrange=(rows, cols), workgroupsize=(blkdim_y, blkdim_x))
-  synchronize(backend)
+  blkdim_x = 8
+  blkdim_y = 8
+  #@show rows
+  #@show cols
+  #@show blkdim_y
+  @cuda threads=(blkdim_y, blkdim_x) blocks=(cld(rows, blkdim_y), cld(cols, blkdim_x)) integrate_cuda!(U⃗n, U⃗1, U⃗2, U⃗3, mesh, EOS, dt, riemann_solver, recon, limiter, skip_uniform)
+  #@benchmark CUDA.@sync @cuda threads=(blkdim_x, blkdim_x) blocks=(cld(rows, blkdim_y), cld(cols, blkdim_x)) integrate_cuda!($U⃗n, $U⃗1, $U⃗2, $U⃗3, $mesh, $EOS, $dt, $riemann_solver, $recon, $limiter, $skip_uniform)
+  #kernel = @cuda launch=false integrate_cuda!(U⃗n, U⃗1, U⃗2, U⃗3, mesh, EOS, dt, riemann_solver, recon, limiter, skip_uniform)
+  #config = launch_configuration(kernel.fun)
+  #println(" Threads to launch", config.threads)
+  #@benchmark CUDA.@sync @cuda threads=(blkdim_y, blkdim_x) blocks=(cld(rows, blkdim_y), cld(cols, blkdim_x)) integrate_cuda!($U⃗n, $U⃗1, $U⃗2, $U⃗3, $mesh, $EOS, $dt, $riemann_solver, $recon, $limiter, $skip_uniform)
 end
 
 function getvec(A::AbstractArray{T,3}, i, j) where {T}
   return SVector{4,T}(view(A, :, i, j))
 end
 
-@kernel function _integrate_ka!(
+function integrate_cuda!(
   U⃗n::AbstractArray{T,N},
   U⃗1::AbstractArray{T,N},
   U⃗2::AbstractArray{T,N},
@@ -81,7 +86,10 @@ end
   skip_uniform,
 ) where {T,N,F2,F3}
 
-  i, j = @index(Global, NTuple)
+  ## Global Row index
+  i = (blockIdx().y - 1) * blockDim().y + threadIdx().y
+  ## Global Col index
+  j = (blockIdx().x - 1) * blockDim().x + threadIdx().x
 
   nh = mesh.nhalo
   ilohi = axes(U⃗n, 2)
@@ -108,55 +116,56 @@ end
     Ω = vol[i, j]
     x⃗_c = SVector{2,T}(view(centroid_pos, 1:2, i, j))
     stencil = Stencil9Point(U_local, S⃗, n̂, ΔS, Ω, EOS, x⃗_c)
-    ∂U⁽ⁿ⁾∂t = riemann_solver.∂U∂t(stencil, recon, limiter, skip_uniform)
+    # ∂U⁽ⁿ⁾∂t = riemann_solver.∂U∂t(stencil, recon, limiter, skip_uniform)
     for ind in 1:4
-      U⃗1[ind, i, j] = U⁽ⁿ⁾[ind] + (∂U⁽ⁿ⁾∂t[ind] * dt)
+      #U⃗1[ind, i, j] = U⁽ⁿ⁾[ind] + (∂U⁽ⁿ⁾∂t[ind] * dt)
+      U⃗1[ind, i, j] = U⁽ⁿ⁾[ind]
     end
   end
 
-  @synchronize()
-  sync_halo!(U⃗1, nh, i ,j)
-  @synchronize()
+  # sync_threads()
+  # sync_halo!(U⃗1, nh, i ,j)
+  # sync_threads()
 
-  # Stage 2
-  if (ilo <= i <= ihi) && (jlo <= j <= jhi)
-    U⁽¹⁾ = SVector{4,T}(view(U⃗1, 1:4, i, j))
-    U⁽ⁿ⁾ = SVector{4,T}(view(U⃗n, 1:4, i, j))
-    U_local = get_block(U⃗1, i, j)
-    S⃗ = @SVector zeros(4)
-    n̂ = SMatrix{2,4}(view(norms, 1:2, 1:4, i, j))
-    ΔS = SVector{4,T}(view(ΔS_face, 1:4, i, j))
-    Ω = vol[i, j]
-    x⃗_c = SVector{2,T}(view(centroid_pos, 1:2, i, j))
-    stencil = Stencil9Point(U_local, S⃗, n̂, ΔS, Ω, EOS, x⃗_c)
-    ∂U⁽¹⁾∂t = riemann_solver.∂U∂t(stencil, recon, limiter, skip_uniform)
-    U⁽²⁾ = 0.75U⁽ⁿ⁾ + 0.25U⁽¹⁾ + ∂U⁽¹⁾∂t * 0.25dt
-    for ind in 1:4
-      U⃗2[ind, i, j] = U⁽²⁾[ind]
-    end
-  end
+  # # Stage 2
+  # if (ilo <= i <= ihi) && (jlo <= j <= jhi)
+  #   U⁽¹⁾ = SVector{4,T}(view(U⃗1, 1:4, i, j))
+  #   U⁽ⁿ⁾ = SVector{4,T}(view(U⃗n, 1:4, i, j))
+  #   U_local = get_block(U⃗1, i, j)
+  #   S⃗ = @SVector zeros(4)
+  #   n̂ = SMatrix{2,4}(view(norms, 1:2, 1:4, i, j))
+  #   ΔS = SVector{4,T}(view(ΔS_face, 1:4, i, j))
+  #   Ω = vol[i, j]
+  #   x⃗_c = SVector{2,T}(view(centroid_pos, 1:2, i, j))
+  #   stencil = Stencil9Point(U_local, S⃗, n̂, ΔS, Ω, EOS, x⃗_c)
+  #   ∂U⁽¹⁾∂t = riemann_solver.∂U∂t(stencil, recon, limiter, skip_uniform)
+  #   U⁽²⁾ = 0.75U⁽ⁿ⁾ + 0.25U⁽¹⁾ + ∂U⁽¹⁾∂t * 0.25dt
+  #   for ind in 1:4
+  #     U⃗2[ind, i, j] = U⁽²⁾[ind]
+  #   end
+  # end
 
-  @synchronize()
-  sync_halo!(U⃗2, nh, i, j)
-  @synchronize()
+  # sync_threads()
+  # sync_halo!(U⃗2, nh, i, j)
+  # sync_threads()
 
-  # Stage 3
-  if (ilo <= i <= ihi) && (jlo <= j <= jhi)
-    U⁽²⁾ = SVector{4,T}(view(U⃗2, 1:4, i, j))
-    U⁽ⁿ⁾ = SVector{4,T}(view(U⃗n, 1:4, i, j))
-    U_local = get_block(U⃗2, i, j)
-    S⃗ = @SVector zeros(4)
-    n̂ = SMatrix{2,4}(view(norms, 1:2, 1:4, i, j))
-    ΔS = SVector{4,T}(view(ΔS_face, 1:4, i, j))
-    Ω = vol[i, j]
-    x⃗_c = SVector{2,T}(view(centroid_pos, 1:2, i, j))
-    stencil = Stencil9Point(U_local, S⃗, n̂, ΔS, Ω, EOS, x⃗_c)
-    ∂U⁽²⁾∂t = riemann_solver.∂U∂t(stencil, recon, limiter, skip_uniform)
-    U⁽ⁿ⁺¹⁾ = (1 / 3) * U⁽ⁿ⁾ + (2 / 3) * U⁽²⁾ + ∂U⁽²⁾∂t * (2 / 3) * dt
-    for ind in 1:4
-      U⃗3[ind, i, j] = U⁽ⁿ⁺¹⁾[ind]
-    end
-  end
+  # # Stage 3
+  # if (ilo <= i <= ihi) && (jlo <= j <= jhi)
+  #   U⁽²⁾ = SVector{4,T}(view(U⃗2, 1:4, i, j))
+  #   U⁽ⁿ⁾ = SVector{4,T}(view(U⃗n, 1:4, i, j))
+  #   U_local = get_block(U⃗2, i, j)
+  #   S⃗ = @SVector zeros(4)
+  #   n̂ = SMatrix{2,4}(view(norms, 1:2, 1:4, i, j))
+  #   ΔS = SVector{4,T}(view(ΔS_face, 1:4, i, j))
+  #   Ω = vol[i, j]
+  #   x⃗_c = SVector{2,T}(view(centroid_pos, 1:2, i, j))
+  #   stencil = Stencil9Point(U_local, S⃗, n̂, ΔS, Ω, EOS, x⃗_c)
+  #   ∂U⁽²⁾∂t = riemann_solver.∂U∂t(stencil, recon, limiter, skip_uniform)
+  #   U⁽ⁿ⁺¹⁾ = (1 / 3) * U⁽ⁿ⁾ + (2 / 3) * U⁽²⁾ + ∂U⁽²⁾∂t * (2 / 3) * dt
+  #   for ind in 1:4
+  #     U⃗3[ind, i, j] = U⁽ⁿ⁺¹⁾[ind]
+  #   end
+  # end
 
   # @inbounds begin
   #   if (ilo <= i <= ihi) && (jlo <= j <= jhi)
