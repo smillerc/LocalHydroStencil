@@ -3,6 +3,7 @@ module RiemannSolverType
 using StaticArrays
 using LinearAlgebra
 using KernelAbstractions
+using CUDA
 
 using ..EOSType
 using ..ReconstructionType
@@ -296,10 +297,13 @@ function MAUSMPW⁺(
   return SVector{4,Float64}(ρflux, ρuflux, ρvflux, Eflux)
 end
 
-@kernel function riemann_solver!(
+# @kernel function riemann_solver!(
+function riemann_solver!(
   W::AbstractArray{T,N}, i_face, j_face, flux_i, flux_j, mesh, EOS, limits
 ) where {T,N}
-  i, j = @index(Global, NTuple)
+  #i, j = @index(Global, NTuple)
+  i = (blockIdx().y - 1) * blockDim().y + threadIdx().y
+  j = (blockIdx().x - 1) * blockDim().x + threadIdx().x
   ilo, ihi, jlo, jhi = limits
 
   @inbounds begin
@@ -368,6 +372,7 @@ end
       flux_j[1:4, i, j] .= G
     end
   end
+  return
 end
 
 @kernel function riemann_solver_iface!(
