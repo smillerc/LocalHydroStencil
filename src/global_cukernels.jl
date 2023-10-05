@@ -344,7 +344,7 @@ function main()
   @show typeof(x)
   @show typeof(y)
   #@show typeof(ArrayT)
-  nhalo = 8
+  nhalo = 2
   mesh = CartesianMesh(x, y, nhalo);
   gpumesh = adapt(CuArray{T}, CartesianMesh(x, y, nhalo));
 
@@ -356,7 +356,7 @@ function main()
   blkdim_x = 4
   blkdim_y = 64
 
-  nh = 8
+  nh = 2
   
   limits = (nh + 1, M - nh, nh + 1, N - nh)
   U = adapt(CuArray{T}, initialize(mesh, eos));
