@@ -239,44 +239,66 @@ end
     # iterations = floor(Int, CUDA.log2(numThreads))
     # @device_code_warntype interactive=true @cuda threads=fld(eq, 2) blocks=system shmem=sh_mem cyclic_red(flat_a, flat_b, flat_c, flat_d, flat_x)
     #@cuda threads=fld(eq, 2) blocks=system shmem=sh_mem cyclic_red(flat_a, flat_b, flat_c, flat_d, flat_x)
-    CUDA.@sync @cuda threads=fld(eq, 2) blocks=system shmem=sh_mem cyclic_owens(flat_a, flat_b, flat_c, flat_d, flat_x)
+    
+    ### Running & Benchmarking the Owens solver
+    CUDA.@sync @cuda threads=fld(eq, 2) blocks=system shmem=sh_mem cyclic_owens(flat_a, flat_b, flat_c, flat_d, flat_x) 
+    @benchmark CUDA.@sync @cuda threads=fld($eq, 2) blocks=$system shmem=$sh_mem cyclic_owens($flat_a, $flat_b, $flat_c, $flat_d, $flat_x)
+    ##########
     #CUDA.@sync CUDA.CUSPARSE.gtsvStridedBatch(flat_a, flat_b, flat_c, flat_d, system, eq)
+    #CUDA.@sync CUDA.CUSPARSE.cusparseZgtsv2StridedBatch(flat_a, flat_b, flat_c, flat_d, flat_x)
+    
+    ### CuSparse gtsv function
+    flat_x_gtsv = CUDA.@sync CUDA.CUSPARSE.gtsv2(flat_a, flat_b, flat_c, flat_d)
     Array(flat_x)
+    Array(flat_x_gtsv)
+    #Array(flat_d)
     #Array(flat_x_cusp)
 
-    x_result = reshape(Array(flat_x), eq, system)
+    ## Testing & Benchmarking gtsv2 of CuSparse
+    tri_mat = Tridiagonal(Array(flat_a[2:end]), Array(flat_b), Array(flat_c[1:end-1]))
+    @test tri_mat * Array(flat_x) ≈ Array(flat_d)
+    ###########
+    @benchmark CUDA.@sync CUDA.CUSPARSE.gtsv2($flat_a, $flat_b, $flat_c, $flat_d)
+
+    ### Benchmarking the CPU solver
+    cpu_tri = tridiag_cpu(tri_mat, Array(flat_d))
+    @benchmark tridiag_cpu($tri_mat, Array($flat_d))
+    #@test tri_mat * Array(flat_x) ≈ Array(flat_d)
+
     
-    for i in 1:system
-        x_cyred = Array(x_result[:, i])
-        in_a = Array(a[:, i])
-        in_b = Array(b[:, i])
-        in_c = Array(c[:, i])
-        in_d = Array(d[:, i])
+    #x_result = reshape(Array(flat_x), eq, system)
+    
+    # for i in 1:system
+    #     x_cyred = Array(x_result[:, i])
+    #     in_a = Array(a[:, i])
+    #     in_b = Array(b[:, i])
+    #     in_c = Array(c[:, i])
+    #     in_d = Array(d[:, i])
 
-        tri_mat = Tridiagonal(in_a[2:end], in_b, in_c[1:end-1])
-        @test tri_mat * x_cyred ≈ in_d
-        break
-    end
+    #     tri_mat = Tridiagonal(in_a[2:end], in_b, in_c[1:end-1])
+    #     @test tri_mat * x_cyred ≈ in_d
+    #     break
+    # end
 
-    function cpu_solve(a, b , c, d)
-        Threads.@threads for i in 1:512
-            in_a = Array(a[:, i])
-            in_b = Array(b[:, i])
-            in_c = Array(c[:, i])
-            in_d = Array(d[:, i])
-            tri_mat = Tridiagonal(in_a[2:end], in_b, in_c[1:end-1])
-            x_cpured = tridiag_cpu(tri_mat, in_d)
-        end
-        return
-    end
+    # function cpu_solve(a, b , c, d)
+    #     Threads.@threads for i in 1:512
+    #         in_a = view(Array(a[:, i]))
+    #         in_b = view(Array(b[:, i]))
+    #         in_c = view(Array(c[:, i]))
+    #         in_d = view(Array(d[:, i]))
+    #         tri_mat = Tridiagonal(in_a[2:end], in_b, in_c[1:end-1])
+    #         x_cpured = tridiag_cpu(tri_mat, in_d)
+    #     end
+    #     return
+    # end
 
-    cpu_solve
-    @benchmark cpu_solve($a, $b, $c, $d)
+    # cpu_solve
+    # @benchmark cpu_solve($a, $b, $c, $d)
 
     #function solve_cpusystem(flat_a, flat_b)
     ## Benchmark numbers
 
-    @benchmark CUDA.@sync @cuda threads=fld($eq, 2) blocks=$system shmem=$sh_mem cyclic_owens($flat_a, $flat_b, $flat_c, $flat_d, $flat_x)
-    CUDA.@profile CUDA.@sync @cuda threads=fld(eq, 2) blocks=system shmem=sh_mem cyclic_owens(flat_a, flat_b, flat_c, flat_d, flat_x)
+    #@benchmark CUDA.@sync @cuda threads=fld($eq, 2) blocks=$system shmem=$sh_mem cyclic_owens($flat_a, $flat_b, $flat_c, $flat_d, $flat_x)
+    #CUDA.@profile CUDA.@sync @cuda threads=fld(eq, 2) blocks=system shmem=sh_mem cyclic_owens(flat_a, flat_b, flat_c, flat_d, flat_x)
         
 #end
